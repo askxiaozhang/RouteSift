@@ -1,10 +1,15 @@
 """Local HTTP dashboard and rule-provider endpoints."""
 
 import asyncio
+import base64
+import binascii
+import hmac
 import logging
 import os
-from contextlib import asynccontextmanager, suppress
+import socket
+from contextlib import ExitStack, asynccontextmanager, suppress
 from datetime import date
+from ipaddress import IPv4Address, ip_network
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -19,6 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import analyzer
+import deepseek_analysis
 import domain_insights
 from collector import Collector
 from rule_exporter import OVERRIDE, PROVIDERS, canonical_target, render_provider
@@ -27,6 +33,35 @@ from storage import Store
 BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / ".env")
 HOST = "127.0.0.1"
+LAN_IP = os.environ.get("AUDITOR_LAN_IP", "").strip()
+LAN_PASSWORD = os.environ.get("AUDITOR_LAN_PASSWORD", "")
+LAN_USER = "routesift"
+PRIVATE_NETWORKS = tuple(map(ip_network, ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")))
+
+
+def lan_host():
+    if not LAN_IP:
+        return None
+    try:
+        address = IPv4Address(LAN_IP)
+    except ValueError as exc:
+        raise RuntimeError("AUDITOR_LAN_IP 必须是本机的局域网 IPv4 地址") from exc
+    if not any(address in network for network in PRIVATE_NETWORKS):
+        raise RuntimeError("AUDITOR_LAN_IP 必须位于私有 IPv4 网段")
+    if not LAN_PASSWORD:
+        raise RuntimeError("启用局域网访问时请设置 AUDITOR_LAN_PASSWORD")
+    return str(address)
+
+
+def authorized_lan_request(request):
+    scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
+    if not LAN_PASSWORD or scheme.lower() != "basic":
+        return False
+    try:
+        supplied = base64.b64decode(credentials, validate=True)
+    except (ValueError, binascii.Error):
+        return False
+    return hmac.compare_digest(supplied, f"{LAN_USER}:{LAN_PASSWORD}".encode())
 
 
 def controller_url():
@@ -66,11 +101,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="RouteSift", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=[HOST, "localhost"])
+LAN_HOST = lan_host()
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=[HOST, "localhost", *([LAN_HOST] if LAN_HOST else [])])
 
 
 @app.middleware("http")
-async def protect_local_dashboard(request: Request, call_next):
+async def protect_dashboard(request: Request, call_next):
+    local = request.client is not None and request.client.host == HOST
+    if not local and not (LAN_HOST and authorized_lan_request(request)):
+        return PlainTextResponse(
+            "请使用 RouteSift 局域网账号登录",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="RouteSift", charset="UTF-8"', "Cache-Control": "no-store"},
+        )
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         origin = request.headers.get("origin")
         expected_origin = f"{request.url.scheme}://{request.headers.get('host')}"
@@ -79,7 +122,7 @@ async def protect_local_dashboard(request: Request, call_next):
             or (origin is not None and origin != expected_origin)
             or request.headers.get("sec-fetch-site") == "cross-site"
         ):
-            return JSONResponse({"detail": "请从本机看板发起审核操作"}, status_code=403)
+            return JSONResponse({"detail": "请从 RouteSift 看板发起审核操作"}, status_code=403)
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -102,6 +145,12 @@ class Decision(BaseModel):
     match_value: str = Field(min_length=1, max_length=253)
     action: Literal["DIRECT", "KEEP_PROXY", "REJECT", "IGNORE"]
     remark: str = Field(default="", max_length=500)
+
+
+class AnalysisRequest(BaseModel):
+    days: int = Field(default=7, ge=1, le=30)
+    tz: str = Field(default="Asia/Singapore", max_length=100)
+    mode: Literal["all", "match"] = "all"
 
 
 @app.get("/")
@@ -131,11 +180,12 @@ def candidates(
     tz: Annotated[str, Query(max_length=100)] = "Asia/Singapore",
     include_reviewed: bool = False,
     mode: Literal["all", "match"] = "all",
+    sort: Literal["bytes", "recent"] = "bytes",
     q: Annotated[str, Query(max_length=253)] = "",
     page: Annotated[int, Query(ge=1)] = 1,
 ):
     return analyzer.candidates(
-        request.app.state.store, days, timezone(tz), include_reviewed, mode, q.strip().casefold(), page, 20,
+        request.app.state.store, days, timezone(tz), include_reviewed, mode, q.strip().casefold(), page, 20, sort=sort,
     )
 
 
@@ -146,6 +196,17 @@ def observed_domains(
     tz: Annotated[str, Query(max_length=100)] = "Asia/Singapore",
 ):
     return domain_insights.observed_hosts(request.app.state.store, q, timezone(tz))
+
+
+@app.post("/api/ai/analysis")
+def run_analysis(request: Request, filters: AnalysisRequest):
+    zone = timezone(filters.tz)
+    if not deepseek_analysis.ACTIVE_ANALYSIS.acquire(blocking=False):
+        raise HTTPException(409, "已有分析正在运行，请稍后再试。")
+    try:
+        return deepseek_analysis.analyze(request.app.state.store, filters.days, zone, filters.mode)
+    finally:
+        deepseek_analysis.ACTIVE_ANALYSIS.release()
 
 
 @app.get("/api/domain-detail")
@@ -211,7 +272,11 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    uvicorn.run(
-        app, host=HOST, port=int(os.environ.get("AUDITOR_PORT", "18765")),
-        proxy_headers=False, access_log=False,
-    )
+    port = int(os.environ.get("AUDITOR_PORT", "18765"))
+    if LAN_HOST:
+        with ExitStack() as stack:
+            listeners = [stack.enter_context(socket.create_server((address, port))) for address in (HOST, LAN_HOST)]
+            logging.info("RouteSift · http://%s:%s · http://%s:%s", HOST, port, LAN_HOST, port)
+            uvicorn.Server(uvicorn.Config(app, access_log=False, proxy_headers=False)).run(sockets=listeners)
+    else:
+        uvicorn.run(app, host=HOST, port=port, proxy_headers=False, access_log=False)

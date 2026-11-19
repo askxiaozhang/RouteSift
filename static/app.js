@@ -6,12 +6,15 @@ const text = (selector, value) => { $(selector).textContent = value; };
 const integer = new Intl.NumberFormat("zh-CN");
 const clock = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Singapore";
+const trafficTime = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone,
+});
 const routes = { PROXY: "代理", DIRECT: "直连", REJECT: "拦截", UNKNOWN: "去向未知" };
 const kinds = { DOMAIN: "精确域名", "DOMAIN-SUFFIX": "域名后缀", "PROCESS-NAME": "进程名", "IP-CIDR": "IP / CIDR" };
 const views = {
   overview: ["流量概览", "查看本机采集的代理用量、流量归因和突发变化。"],
   domains: ["域名详情", "按时间查看单个域名的用量和实际走向，结合命中规则做审核。"],
-  review: ["审核队列", "按代理用量查看观测到的目的地址与进程。"],
+  review: ["审核队列", "按代理用量或最近有流量的时间查看目的地址与进程。"],
   rules: ["规则管理", "管理分流决策，并将本机规则集接入 FlClash。"],
 };
 const state = { view: "overview", mode: "all", page: 1, report: null, decisions: [], requestId: 0 };
@@ -130,8 +133,10 @@ async function loadView() {
     } else if (view === "domains") {
       await loadDomainView(id);
     } else if (view === "review") {
+      syncAnalysisScope();
       const params = query($("#review-reviewed").checked);
       params.set("mode", state.mode);
+      params.set("sort", $("#review-sort").value);
       params.set("q", $("#search").value);
       params.set("page", state.page);
       const result = await api(`/api/candidates?${params}`);
@@ -405,11 +410,21 @@ function drawCharts() {
   quadChart(state.report.quadrants);
 }
 
+function latestTrafficCell(timestamp) {
+  if (timestamp == null) return "—";
+  const date = new Date(timestamp * 1000);
+  const time = el("time", trafficTime.format(date));
+  time.dateTime = date.toISOString();
+  time.title = "最近一个有代理流量的 5 分钟窗口的开始时间";
+  return time;
+}
+
 function renderQueue(result) {
   state.page = result.page;
   table("#queue-table", [
     { label: "目标" }, { label: "进程" }, { label: "命中规则" },
-    { label: "代理流量", numeric: true }, { label: "审核" }, { label: "操作" },
+    { label: "代理流量", numeric: true }, { label: "最近有流量", numeric: true },
+    { label: "审核" }, { label: "操作" },
   ], result.items.map((item) => {
     const rules = el("div");
     for (const name of item.rules) rules.append(tag(name || "未知"), " ");
@@ -418,7 +433,7 @@ function renderQueue(result) {
       ? button(review ? "调整" : "审核", () => openDecision(item, review))
       : "—";
     return [
-      domainLink(item.host), item.process || "未知进程", rules, bytes(item.bytes),
+      domainLink(item.host), item.process || "未知进程", rules, bytes(item.bytes), latestTrafficCell(item.last_traffic_at),
       review ? tag(review.action) : "待审核", action,
     ];
   }), "当前筛选范围暂无候选。");
@@ -464,8 +479,8 @@ function openDecision(item, existing) {
     return node;
   }));
   $("#suggested").value = String(existing ? Math.max(0, targets.findIndex((target) => sameTarget(target, existing))) : 0);
-  $("#action").value = existing?.action || "";
-  $("#remark").value = existing?.remark || "";
+  $("#action").value = existing?.action ?? item?.proposal?.action ?? "";
+  $("#remark").value = existing?.remark ?? item?.proposal?.remark ?? "";
   $("#save").disabled = false;
   $("#review-dialog").showModal();
 }
@@ -545,7 +560,9 @@ for (const link of $$("[data-go]")) {
 $("#refresh").addEventListener("click", () => { refreshStatus(); loadView(); });
 $("#days").addEventListener("change", () => { state.page = 1; loadView(); });
 $("#overview-reviewed").addEventListener("change", loadView);
-$("#review-reviewed").addEventListener("change", () => { state.page = 1; loadView(); });
+for (const selector of ["#review-reviewed", "#review-sort"]) {
+  $(selector).addEventListener("change", () => { state.page = 1; loadView(); });
+}
 $("#search").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.page = 1; loadView(); }, 180);
@@ -559,6 +576,7 @@ window.addEventListener("hashchange", followViewLocation);
 new ResizeObserver(drawCharts).observe($("#trend-chart"));
 new ResizeObserver(drawCharts).observe($("#quad-chart"));
 initDomainView();
+initAnalysis();
 followViewLocation();
 refreshStatus();
 setInterval(refreshStatus, 5000);
