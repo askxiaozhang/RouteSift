@@ -1,0 +1,15 @@
+.env*
+!.env.example
+.venv/
+.venv-cache/
+__pycache__/
+.codegraph/
+.cursor/
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+.DS_Store

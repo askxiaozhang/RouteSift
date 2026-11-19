@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RouteSift · 流量审计</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/domains.js"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div><strong>RouteSift</strong><span>FlClash / Mihomo</span></div>
+    </div>
+    <nav aria-label="主导航">
+      <button type="button" data-view="overview" aria-current="page"><span aria-hidden="true">◫</span> 流量概览</button>
+      <button type="button" data-view="domains"><span aria-hidden="true">⌕</span> 域名详情</button>
+      <button type="button" data-view="review"><span aria-hidden="true">≡</span> 审核队列</button>
+      <button type="button" data-view="rules"><span aria-hidden="true">⇆</span> 规则管理</button>
+    </nav>
+    <div class="rail-status">
+      <div><i id="status-dot"></i><strong id="status-label">连接检查中</strong></div>
+      <span id="status-address" class="mono">Mihomo</span>
+      <span id="last-sample"></span>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header class="page-head">
+      <div>
+        <h1 id="page-title">流量概览</h1>
+        <p id="page-description">查看本机采集的代理用量、流量归因和突发变化。</p>
+      </div>
+      <div id="range-tools" class="tools">
+        <label for="days">统计周期</label>
+        <select id="days">
+          <option value="1">今天</option>
+          <option value="7" selected>近 7 天</option>
+          <option value="14">近 14 天</option>
+          <option value="30">近 30 天</option>
+        </select>
+        <button type="button" class="btn secondary" id="refresh">刷新</button>
+      </div>
+    </header>
+    <p id="collector-notice" class="notice" role="status" hidden></p>
+    <p id="load-error" class="notice error" role="alert" hidden></p>
+
+    <section id="overview" class="view" aria-labelledby="page-title">
+      <div class="metrics">
+        <article class="metric dominant"><span>代理流量</span><strong id="total-proxy">—</strong><small id="proxy-io">上传 / 下载</small></article>
+        <article class="metric"><span>直连流量</span><strong id="total-direct">—</strong><small id="direct-io">上传 / 下载</small></article>
+        <article class="metric"><span>代理占比</span><strong id="proxy-share">—</strong><small>按代理与直连流量计算</small></article>
+        <article class="metric"><span>观测到的连接</span><strong id="total-connections">—</strong><small id="coverage">采样覆盖</small></article>
+      </div>
+
+      <div class="trend-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div><h2>每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
+            <div class="legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span></div>
+          </div>
+          <div class="chart" id="trend-chart"><canvas aria-hidden="true"></canvas><p class="chart-empty" hidden>等待第一批采样数据</p></div>
+          <details><summary>每日明细</summary><div id="trend-table"></div></details>
+        </article>
+        <article class="panel breakdown">
+          <div class="panel-head"><div><h2>流量去向</h2><p>按代理链分类</p></div></div>
+          <div id="route-bar" class="route-bar" aria-hidden="true"></div>
+          <dl id="route-list"></dl>
+        </article>
+      </div>
+
+      <div class="section-head">
+        <div><h2>代理消耗分析</h2><p>总览始终包含全部采样。以下分析可筛选审核记录。</p></div>
+        <label class="check"><input type="checkbox" id="overview-reviewed"> 显示已审核</label>
+      </div>
+      <div class="analysis-grid">
+        <article class="panel">
+          <div class="panel-head"><div><h2>域名帕累托</h2><p>按主域名汇总 · Top 30</p></div><button type="button" class="text-btn" data-go="review">去审核 →</button></div>
+          <div id="domain-rank"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h2>进程归因</h2><p>展开进程查看流量主要流向 · Top 30</p></div></div>
+          <div id="process-rank"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h2>MATCH 兜底榜</h2><p>命中兜底规则的代理目标 · Top 30</p></div><button type="button" class="text-btn" data-go="match">去审核 →</button></div>
+          <div id="match-rank"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><h2>流量 × 活跃天数</h2><p id="quad-threshold">中位数分隔象限 · 流量轴为对数</p></div></div>
+          <div class="chart" id="quad-chart"><canvas aria-hidden="true"></canvas><p class="chart-empty" hidden>暂无可分析的代理流量</p></div>
+          <details><summary>象限明细</summary><div id="quad-table"></div></details>
+        </article>
+      </div>
+      <article class="panel spikes">
+        <div class="panel-head"><div><h2>单日突发</h2><p id="spike-period">对比最近完整日与采样覆盖相近的历史日期</p></div></div>
+        <div id="spike-table"></div>
+      </article>
+    </section>
+
+    <section id="domains" class="view" aria-labelledby="page-title" hidden>
+      <article class="panel domain-search">
+        <form id="domain-form">
+          <div class="domain-filter domain-target">
+            <label for="domain-host">域名或 IP</label>
+            <input id="domain-host" type="search" required maxlength="253" placeholder="例如 binance.com" list="observed-domains" autocomplete="off" spellcheck="false">
+            <datalist id="observed-domains"></datalist>
+          </div>
+          <div class="domain-filter"><label for="domain-scope">匹配范围</label><select id="domain-scope"><option value="exact">仅此域名</option><option value="suffix">含子域名</option></select></div>
+          <div class="domain-filter"><label for="domain-start">开始日期</label><input type="date" id="domain-start" required></div>
+          <div class="domain-filter"><label for="domain-end">结束日期</label><input type="date" id="domain-end" required></div>
+          <div class="domain-filter"><label for="domain-grain">时间粒度</label><select id="domain-grain"><option value="5m">5 分钟</option><option value="hour">1 小时</option><option value="day">1 天</option></select></div>
+          <button type="submit" class="btn primary">查看流量</button>
+        </form>
+        <div class="domain-presets" aria-label="快捷日期">
+          <span>快捷日期</span>
+          <button class="text-btn" type="button" data-domain-days="1">今天</button>
+          <button class="text-btn" type="button" data-domain-days="7">近 7 天</button>
+          <button class="text-btn" type="button" data-domain-days="30">近 30 天</button>
+        </div>
+      </article>
+
+      <article class="panel domain-start" id="domain-start-here">
+        <h2>从一个目标开始</h2>
+        <p id="domain-start-message">输入域名，或从概览和审核队列中点选一个目标。</p>
+        <div class="provider-links" id="domain-suggestions"></div>
+      </article>
+
+      <div id="domain-results" hidden>
+        <header class="section-head domain-heading">
+          <div><h2 id="domain-name" class="mono"></h2><p id="domain-range"></p></div>
+          <button type="button" class="btn primary" id="domain-audit">审核此域名</button>
+        </header>
+        <div class="metrics domain-metrics">
+          <article class="metric dominant"><span>代理流量</span><strong id="domain-proxy">—</strong><small id="domain-proxy-io"></small></article>
+          <article class="metric"><span>直连流量</span><strong id="domain-direct">—</strong><small id="domain-direct-io"></small></article>
+          <article class="metric"><span>代理占比</span><strong id="domain-share">—</strong><small id="domain-share-caption"></small></article>
+          <article class="metric"><span>观测到的连接</span><strong id="domain-connections">—</strong><small id="domain-coverage"></small></article>
+        </div>
+
+        <article class="panel domain-timeline">
+          <div class="panel-head">
+            <div><h2>分时流量</h2><p>查看某个时间段的用量，或展开分时明细。</p></div>
+            <div class="legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span><span class="reject">拦截</span><span class="unknown">去向未知</span><span class="unobserved">无采样</span></div>
+          </div>
+          <div class="chart" id="domain-chart" tabindex="0" role="group" aria-label="分时流量图，使用左右方向键查看各时间段">
+            <canvas aria-hidden="true"></canvas>
+            <p class="chart-empty" hidden></p>
+            <div id="domain-tooltip" class="chart-tooltip" role="status" hidden></div>
+          </div>
+          <details><summary>分时明细</summary><div id="domain-time-table"></div></details>
+        </article>
+
+        <article class="panel domain-timeline">
+          <div class="panel-head"><div><h2>实际分流</h2><p id="domain-policy-summary">按命中规则、策略组和实际节点汇总。</p></div><div id="domain-review-status"></div></div>
+          <div id="domain-policy-table"></div>
+        </article>
+
+        <article class="panel domain-timeline" id="domain-hosts-panel" hidden>
+          <div class="panel-head"><div><h2>域名与子域名</h2><p>按总用量显示前 25 项，点击查看单独走势。</p></div></div>
+          <div id="domain-host-table"></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="review" class="view" aria-labelledby="page-title" hidden>
+      <article class="panel table-panel">
+        <div class="table-controls">
+          <div class="segments" role="group" aria-label="筛选规则">
+            <button type="button" data-mode="all" aria-pressed="true">全部代理</button>
+            <button type="button" data-mode="match" aria-pressed="false">MATCH 兜底</button>
+          </div>
+          <input id="search" type="search" maxlength="253" placeholder="搜索域名、IP 或进程" aria-label="搜索域名、IP 或进程">
+          <label class="check"><input type="checkbox" id="review-reviewed"> 显示已审核</label>
+        </div>
+        <div id="queue-table"></div>
+        <div class="pagination">
+          <p id="queue-count"></p>
+          <div><button type="button" class="btn secondary" id="prev">上一页</button><button type="button" class="btn secondary" id="next">下一页</button></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="rules" class="view" aria-labelledby="page-title" hidden>
+      <article class="panel integration">
+        <div class="panel-head"><div><h2>接入 FlClash</h2><p>在当前配置的扩展脚本中粘贴覆写脚本。FlClash 每 5 分钟拉取一次规则集，也可手动更新。</p></div><a class="btn primary" href="/rules/flclash-override.js" download>下载覆写脚本</a></div>
+        <div class="provider-links">
+          <a href="/rules/my-direct.yaml" target="_blank" rel="noopener">DIRECT</a>
+          <a href="/rules/my-reject.yaml" target="_blank" rel="noopener">REJECT</a>
+          <a href="/rules/my-keep-proxy.yaml" target="_blank" rel="noopener">KEEP_PROXY</a>
+        </div>
+        <p class="helper">重叠时，保留原分流优先，其次拦截、直连。忽略只影响审核队列。</p>
+      </article>
+      <article class="panel table-panel">
+        <div class="panel-head"><div><h2>审核记录</h2><p>修改或撤销后，规则集会立即重新生成。</p></div><button type="button" class="btn secondary" id="add-rule">添加审核</button></div>
+        <div id="decision-table"></div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="review-dialog" aria-labelledby="dialog-title">
+    <form id="decision-form">
+      <header><div><h2 id="dialog-title">审核规则</h2><p id="dialog-context"></p></div><button type="button" class="text-btn close" id="dialog-close" aria-label="关闭">×</button></header>
+      <label id="suggested-label" for="suggested">目标粒度</label>
+      <select id="suggested"></select>
+      <div class="edit-target" id="edit-target" hidden>
+        <label for="match-type">匹配方式</label>
+        <select id="match-type">
+          <option value="DOMAIN">精确域名</option>
+          <option value="DOMAIN-SUFFIX">域名后缀</option>
+          <option value="PROCESS-NAME">进程名</option>
+          <option value="IP-CIDR">IP / CIDR</option>
+        </select>
+        <label for="match-value">匹配值</label>
+        <input id="match-value" type="text" maxlength="253">
+      </div>
+      <label for="action">审核结论</label>
+      <select id="action">
+        <option value="" disabled hidden>选择审核结论</option>
+        <option value="DIRECT">直连 · DIRECT</option>
+        <option value="KEEP_PROXY">保留原分流 · KEEP_PROXY</option>
+        <option value="REJECT">拦截 · REJECT</option>
+        <option value="IGNORE">忽略 · IGNORE</option>
+      </select>
+      <label for="remark">备注 <small>可选</small></label>
+      <textarea id="remark" maxlength="500" rows="2" placeholder="记录审核依据"></textarea>
+      <p id="decision-error" class="error-text" role="alert" hidden></p>
+      <footer><button type="button" class="btn secondary" id="dialog-cancel">取消</button><button type="submit" class="btn primary" id="save">保存审核</button></footer>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" hidden><span role="status" id="toast-text"></span><button type="button" id="toast-undo" hidden>撤销</button></div>
+</body>
+</html>

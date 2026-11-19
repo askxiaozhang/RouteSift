@@ -1,0 +1,12 @@
+[Unit]
+Description=FlClash traffic auditor
+
+[Service]
+Type=simple
+WorkingDirectory=%h/network-monitor
+ExecStart=%h/network-monitor/.venv/bin/python %h/network-monitor/server.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
