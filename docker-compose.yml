@@ -1,0 +1,25 @@
+name: routesift
+
+services:
+  routesift:
+    build: .
+    image: routesift:local
+    container_name: routesift
+    restart: unless-stopped
+    stop_grace_period: 15s
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      AUDITOR_BIND_HOST: "0.0.0.0"
+      AUDITOR_PORT: "${AUDITOR_PORT:-18765}"
+      AUDITOR_LAN_PORT: "${AUDITOR_LAN_PORT:-18766}"
+      MIHOMO_URL: "${DOCKER_MIHOMO_URL:-ws://host.docker.internal:9090/connections}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${AUDITOR_PORT:-18765}:${AUDITOR_PORT:-18765}"
+      # With LAN disabled, reserve a dynamic loopback port for the inactive LAN listener.
+      - "${AUDITOR_LAN_IP:-127.0.0.1}:${AUDITOR_LAN_IP:+${AUDITOR_PORT:-18765}}:${AUDITOR_LAN_PORT:-18766}"
+    volumes:
+      - ./data:/app/data

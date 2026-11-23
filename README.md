@@ -140,6 +140,33 @@ RouteSift 读取手机诊断流里的分流记录，按域名和时间统计次�
 
 ## 常驻运行
 
+### Docker Compose
+
+在项目根目录准备 `.env`，填写宿主机 Mihomo 的 `MIHOMO_SECRET`。如果已有使用同一数据库和端口的 RouteSift 进程，先退出该进程，再构建并后台启动容器。
+
+```sh
+docker compose up -d --build
+```
+
+在宿主机打开 [本机看板](http://127.0.0.1:18765)。容器设置了 `restart: unless-stopped`，可通过 `docker compose ps` 查看 HTTP 健康状态，通过 `docker compose logs -f routesift` 查看日志。Mihomo 是否已连接可在看板确认。
+
+- **连接 Mihomo**　容器默认通过 `ws://host.docker.internal:9090/connections` 访问宿主机。如果控制器端口不同，在 `.env` 中设置 `DOCKER_MIHOMO_URL`，例如 `ws://host.docker.internal:9191/connections`。使用 Linux Docker Engine 时，确保控制器可从 Docker 网桥访问，并设置控制器密钥。 [Docker 容器访问宿主机说明](https://docs.docker.com/compose/how-tos/networking/#custom-dns-with-extra_hosts)
+- **局域网访问**　在 `.env` 设置 `AUDITOR_LAN_IP` 和 `AUDITOR_LAN_PASSWORD`。默认宿主机的 `127.0.0.1:18765` 免密，`<AUDITOR_LAN_IP>:18765` 使用 `routesift` 账号登录。Compose 将它们映射到容器内两个端口。若自定义 `AUDITOR_PORT`，请确保它与容器内的 `AUDITOR_LAN_PORT`（默认 `18766`）不同。Mac 换网后，更新 `.env` 的局域网地址并运行 `docker compose up -d`。
+- **数据目录**　Compose 将 `./data` 挂载到 `/app/data`，重建容器后仍使用同一个 SQLite 数据库。若自定义 `AUDITOR_DB`，可将数据库路径设在此目录下。
+
+若 DeepSeek 凭据存放在宿主机的另一个 `.env`，可创建本地 `docker-compose.override.yml`，以只读方式挂载到容器。替换下面的宿主机文件路径。
+
+```yaml
+services:
+  routesift:
+    environment:
+      DEEPSEEK_ENV_FILE: /run/secrets/deepseek.env
+    volumes:
+      - /absolute/path/to/deepseek.env:/run/secrets/deepseek.env:ro
+```
+
+### 系统服务
+
 **macOS**　将 [launchd 模板](deploy/com.flclash.auditor.plist) 中的 `WORKSPACE_PATH` 替换为项目绝对路径。创建项目下的 `data/`，将修改后的模板保存到 `~/Library/LaunchAgents/com.flclash.auditor.plist`。退出前台进程后加载。
 
 ```sh

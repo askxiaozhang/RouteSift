@@ -40,7 +40,12 @@ from storage import Store
 BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / ".env")
 HOST = "127.0.0.1"
+PORT = int(os.environ.get("AUDITOR_PORT", "18765"))
+BIND_HOST = os.environ.get("AUDITOR_BIND_HOST", "").strip()
+if BIND_HOST and BIND_HOST != "0.0.0.0":
+    raise RuntimeError("AUDITOR_BIND_HOST 仅支持留空或设为 0.0.0.0")
 LAN_IP = os.environ.get("AUDITOR_LAN_IP", "").strip()
+LAN_PORT = int(os.environ.get("AUDITOR_LAN_PORT", str(PORT + 1)))
 LAN_PASSWORD = os.environ.get("AUDITOR_LAN_PASSWORD", "")
 LAN_USER = "routesift"
 MODULE_TOKEN = os.environ.get("SHADOWROCKET_MODULE_TOKEN", "").strip()
@@ -79,9 +84,12 @@ def controller_url():
         parsed.port  # Validate a custom port.
     except ValueError as exc:
         raise RuntimeError("MIHOMO_URL 的端口或地址无效") from exc
+    allowed_hosts = {"127.0.0.1", "::1", "localhost"}
+    if BIND_HOST:
+        allowed_hosts.add("host.docker.internal")
     if (
         parsed.scheme not in {"ws", "wss"}
-        or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}
+        or parsed.hostname not in allowed_hosts
         or parsed.path.rstrip("/") != "/connections"
         or parsed.username is not None or parsed.fragment or parsed.query
     ):
@@ -125,6 +133,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RouteSift", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 LAN_HOST = lan_host()
+if BIND_HOST and LAN_HOST and LAN_PORT == PORT:
+    raise RuntimeError("容器模式下 AUDITOR_LAN_PORT 不能与 AUDITOR_PORT 相同")
 MODULE_PATH = (
     f"/rules/ios/{MODULE_TOKEN}/routesift-ios.sgmodule"
     if LAN_HOST and len(MODULE_TOKEN) >= 32 and all(c.isascii() and (c.isalnum() or c in "-_") for c in MODULE_TOKEN)
@@ -135,7 +145,12 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=[HOST, "localhost", *([L
 
 @app.middleware("http")
 async def protect_dashboard(request: Request, call_next):
-    local = request.client is not None and request.client.host == HOST
+    server_port = (request.scope.get("server") or (None, None))[1]
+    local = (
+        server_port == PORT
+        if BIND_HOST
+        else request.client is not None and request.client.host == HOST
+    )
     module_request = request.method in {"GET", "HEAD"} and MODULE_PATH and hmac.compare_digest(
         request.url.path.encode(), MODULE_PATH.encode(),
     )
@@ -422,11 +437,24 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    port = int(os.environ.get("AUDITOR_PORT", "18765"))
-    if LAN_HOST:
+    if BIND_HOST:
         with ExitStack() as stack:
-            listeners = [stack.enter_context(socket.create_server((address, port))) for address in (HOST, LAN_HOST)]
-            logging.info("RouteSift · http://%s:%s · http://%s:%s", HOST, port, LAN_HOST, port)
+            binds = [(BIND_HOST, PORT)]
+            if LAN_HOST:
+                binds.append((BIND_HOST, LAN_PORT))
+            listeners = [stack.enter_context(socket.create_server(addr)) for addr in binds]
+            if LAN_HOST:
+                logging.info(
+                    "RouteSift · http://%s:%s · http://%s:%s (container ports %s/%s)",
+                    HOST, PORT, LAN_HOST, PORT, PORT, LAN_PORT,
+                )
+            else:
+                logging.info("RouteSift · http://%s:%s (container port %s)", HOST, PORT, PORT)
+            uvicorn.Server(uvicorn.Config(app, access_log=False, proxy_headers=False)).run(sockets=listeners)
+    elif LAN_HOST:
+        with ExitStack() as stack:
+            listeners = [stack.enter_context(socket.create_server((address, PORT))) for address in (HOST, LAN_HOST)]
+            logging.info("RouteSift · http://%s:%s · http://%s:%s", HOST, PORT, LAN_HOST, PORT)
             uvicorn.Server(uvicorn.Config(app, access_log=False, proxy_headers=False)).run(sockets=listeners)
     else:
-        uvicorn.run(app, host=HOST, port=port, proxy_headers=False, access_log=False)
+        uvicorn.run(app, host=HOST, port=PORT, proxy_headers=False, access_log=False)
