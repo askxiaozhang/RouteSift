@@ -138,6 +138,21 @@ td.empty { color: var(--muted); text-align: center; padding: 24px 10px; }
 .provider-links a { border: 1px solid var(--line); padding: 6px 8px; border-radius: 4px; font: 12px var(--mono); color: var(--pine); text-decoration: none; }
 .provider-links a:hover { text-decoration: underline; }
 .helper { margin-top: 11px; }
+.shadowrocket summary { font-size: 17px; font-weight: 600; }
+.shadowrocket fieldset { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
+.shadowrocket label { font-weight: 600; }
+.shadowrocket textarea { display: block; width: 100%; margin: 6px 0 10px; resize: vertical; font-family: var(--mono); font-size: 16px; }
+#shadowrocket-remote { margin: 12px 0; }
+#shadowrocket-url { display: block; width: 100%; margin-top: 5px; font-size: 16px; }
+.shadowrocket-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-form { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.phone-form label { display: grid; gap: 5px; min-width: 0; font-size: 12px; font-weight: 600; }
+.phone-form input { min-width: 0; max-width: 100%; font-size: 16px; }
+.phone-form input[type=file] { width: 280px; }
+.phone-import summary { font-size: 17px; font-weight: 600; }
+.phone-import .phone-form { margin-top: 10px; }
+.phone-legend { flex-wrap: wrap; margin-top: 11px; }
+#phone-log-hosts .text-btn { overflow-wrap: anywhere; text-align: left; }
 dialog { width: min(500px, calc(100% - 24px)); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); padding: 21px; background: var(--white); box-shadow: 0 20px 65px #14292850; max-height: calc(100% - 24px); }
 dialog::backdrop { background: #0d2624a0; }
 dialog header, dialog footer { display: flex; justify-content: space-between; gap: 9px; }
@@ -170,7 +185,7 @@ dialog textarea { resize: vertical; }
   .page-head { flex-wrap: wrap; align-items: start; }
   .brand strong { font-size: 15px; }
   .rail { gap: 8px; }
-  .rail nav { order: 1; width: 100%; }
+  .rail nav { order: 1; width: 100%; flex-wrap: wrap; }
   .rail nav button { flex: 1; justify-content: center; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .trend-grid, .analysis-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }

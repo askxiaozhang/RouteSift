@@ -12,7 +12,7 @@ EXTRACT = tldextract.TLDExtract(
     suffix_list_urls=(), cache_dir=None, include_psl_private_domains=True
 )
 DOMAIN_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
-PROVIDERS = {"direct": "DIRECT", "reject": "REJECT", "keep-proxy": "KEEP_PROXY"}
+PROVIDERS = {"direct": "DIRECT", "reject": "REJECT", "keep-proxy": "KEEP_PROXY", "match-target": "MATCH_TARGET"}
 OVERRIDE = Path(__file__).parent / "deploy" / "flclash-override.js"
 
 
@@ -120,7 +120,7 @@ class ReviewMatcher:
                 )
             else:
                 matches.extend(decision for subnet, decision in self.networks if address in subnet)
-        priority = {"KEEP_PROXY": 0, "REJECT": 1, "DIRECT": 2, "IGNORE": 3}
+        priority = {"MATCH_TARGET": 0, "KEEP_PROXY": 1, "REJECT": 2, "DIRECT": 3, "IGNORE": 4}
         return sorted(
             (match for match in matches if match is not None),
             key=lambda match: (priority[match["action"]], -match["id"]),

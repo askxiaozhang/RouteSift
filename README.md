@@ -1,8 +1,8 @@
 # RouteSift
 
-**追踪每个域名的流量走势，查清实际分流，再把审核结论导出成规则。**
+**查看电脑与手机的连接去向，把确认过的分流规则同步到 FlClash 和 Shadowrocket。**
 
-Local traffic analytics and rule review for FlClash and Mihomo. Inspect domain-level bandwidth over time, see which routing policies handled it, and export reviewed decisions as Mihomo rule providers.
+Local traffic analytics and shared routing rules for FlClash and Shadowrocket. Inspect per-domain bandwidth from Mihomo, monitor iOS connection logs, and reuse reviewed routing decisions across devices.
 
 ![RouteSift 的域名详情，含分时流量、策略组和规则命中情况](assets/domain-detail.png)
 
@@ -15,7 +15,9 @@ Local traffic analytics and rule review for FlClash and Mihomo. Inspect domain-l
 | 某个域名今天什么时候开始大量走代理？ | 打开「域名详情」，选择精确域名或含子域名，按 5 分钟、1 小时或 1 天查看上传、下载、代理和直连流量。 |
 | 这段流量为什么走了这条线路？ | 在「实际分流」看命中规则、策略组和节点。流量概览还提供域名和进程排行、MATCH 兜底榜、流量频次四象限和单日突发。 |
 | 哪些目标值得优先审核？ | 审核队列支持按代理流量大小或最近活动排序，也可以用 DeepSeek 生成分流建议和规则示例。 |
-| 已经确认这个目标可以直连，怎么加规则？ | 从域名详情或审核队列保存决策。RouteSift 通过本机 HTTP 接口生成规则集，由 FlClash 或其他 Mihomo 客户端更新。 |
+| 看到一个域名想设为直连，怎么加规则？ | 在「域名详情」「审核队列」或「手机日志」保存规则，RouteSift 会刷新已接入的 FlClash。 |
+| 手机和电脑可以共用规则吗？ | 在「规则管理」复制 Shadowrocket 远程模块地址，添加一次后即可更新共享直连和拦截规则。 |
+| 怎样核对 iPhone 上哪些域名走了代理？ | 打开「手机日志」查看 Shadowrocket 的实时诊断记录，也可导入代理日志文件。 |
 
 ## 快速开始 · Quick start
 
@@ -42,15 +44,18 @@ Enable your client's loopback controller, run the commands above, then open the 
 | `MIHOMO_URL` | `ws://127.0.0.1:9090/connections` | Mihomo 的 WebSocket 地址 |
 | `MIHOMO_SECRET` | 空 | 外部控制器的 Bearer 密钥 |
 | `AUDITOR_PORT` | `18765` | 本机看板和规则接口端口 |
-| `AUDITOR_DB` | `data/traffic.db` | 流量和审核记录的 SQLite 路径 |
+| `AUDITOR_DB` | `data/traffic.db` | 电脑流量、手机日志和分流规则的 SQLite 路径 |
 | `AUDITOR_LAN_IP` | 空 | 额外监听的本机局域网 IPv4 地址 |
 | `AUDITOR_LAN_PASSWORD` | 空 | 启用局域网访问时使用的登录密码 |
+| `SHADOWROCKET_MODULE_TOKEN` | 空 | 远程模块的随机令牌，至少 32 个字符。局域网访问已启用且令牌有效时生成订阅地址 |
+| `SHADOWROCKET_LOG_URL` | 空 | 手机诊断页面显示的地址，例如 `http://192.168.1.50:1082/api/log` |
+| `SHADOWROCKET_LOG_TZ` | `Asia/Singapore` | 实时诊断日志使用的 IANA 时区 |
 
 ## 局域网访问
 
 在 `.env` 中将 `AUDITOR_LAN_IP` 设为运行 RouteSift 的机器的局域网 IP，并为 `AUDITOR_LAN_PASSWORD` 设置密码。重启后，同一局域网的设备可以通过 `http://<局域网IP>:18765` 打开看板，用用户名 `routesift` 和上面的密码登录。换网络导致 IP 变化时，更新该地址并重启。
 
-在运行 FlClash 的同一台机器上启动 RouteSift。控制器和覆写脚本里的规则集地址都使用 `127.0.0.1`，局域网入口用于查看和审核。
+在运行 FlClash 的同一台机器上启动 RouteSift。控制器和 FlClash 规则集使用 `127.0.0.1`。手机可通过局域网看板查看日志、添加规则，并从同一台机器更新 Shadowrocket 模块。
 
 ## 把审核结论加进 FlClash
 
@@ -70,18 +75,52 @@ Enable your client's loopback controller, run the commands above, then open the 
 
 ### 更新和撤销
 
-FlClash 会每 5 分钟从 RouteSift 拉取规则集。需要立即生效时，打开「代理 → 右上角 ⋯ → 提供者 → 规则提供者」，对相应的 `traffic-auditor-*` 条目点「同步」。如果把一条决策从直连改成拦截等其他动作，使用「提供者」右上角的同步按钮刷新所有规则集。保持 RouteSift 运行，并在 FlClash 的「规则」模式下用新连接验证。 [FlClash 同步入口](https://github.com/chen08209/FlClash/blob/v0.8.92/lib/views/proxies/providers.dart#L39-L69)
+保存、修改或撤销审核规则时，RouteSift 会通过本机控制器刷新当前配置已加载的 `traffic-auditor-*` 规则集。FlClash 也会每 5 分钟拉取一次。可在「代理 → 右上角 ⋯ → 提供者」手动同步，并在「规则」模式下用新连接验证。 [FlClash 同步入口](https://github.com/chen08209/FlClash/blob/v0.8.92/lib/views/proxies/providers.dart#L39-L69)
 
-回退时，在 RouteSift「规则管理 → 审核记录」撤销对应记录，再同步规则提供者。
+回退时，在 RouteSift「规则管理 → 审核记录」撤销对应记录。规则变更对之后建立的连接生效。旧版覆写脚本可重新下载更新，以使用 `MATCH_TARGET` 对应的规则提供者。
 
 | 审核结论 | 生效方式 |
 | --- | --- |
 | `DIRECT` | 命中时直连，同步 `traffic-auditor-direct` |
 | `KEEP_PROXY` | 命中时交回原配置处理，同步 `traffic-auditor-keep-proxy` |
+| `MATCH_TARGET` | 使用当前配置最后一条 MATCH 规则的目标策略组，同步 `traffic-auditor-match-target` |
 | `REJECT` | 命中时拦截，同步 `traffic-auditor-reject` |
 | `IGNORE` | 只影响审核筛选 |
 
-多个审核目标重叠时，保留原分流优先，其次拦截、直连。其他 Mihomo 客户端可参考 [覆写脚本](deploy/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
+多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](deploy/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
+
+## 手机和电脑共享分流规则
+
+1. 启用局域网访问。运行 `openssl rand -hex 32` 生成令牌，把结果填入 `.env` 的 `SHADOWROCKET_MODULE_TOKEN`，然后重启 RouteSift。
+2. iPhone 和 Mac 连到同一局域网，在 RouteSift「规则管理 → 接入 Shadowrocket」复制订阅地址。在 Shadowrocket「配置 → 模块 → 添加」粘贴地址并启用，首页「全局路由」选「配置」。如果此前导入过文件版模块，停用旧版后使用远程模块。
+3. 后续在 RouteSift 保存规则即可更新订阅内容。FlClash 会尝试立即刷新。Shadowrocket 可在「配置 → 模块」点「更新模块」，也可在「设置 → 更新 → 模块」开启自动后台更新。手机按系统安排拉取，更新时需能访问运行中的 RouteSift。 [Shadowrocket 模块更新说明](https://github.com/LOWERTOP/Shadowrocket/wiki#自动更新)
+
+电脑和手机共享按域名或 IP 匹配的 `DIRECT` 和 `REJECT` 规则。例如，保存域名后缀 `weixin.qq.com` 为直连，可覆盖 `mp.weixin.qq.com` 等子域名。「手机日志」的目标列表也有「添加规则」入口，保存后进入同一规则库。订阅地址只读取模块内容，看板与日志仍需登录。模块可下载为文件供离线导入。
+
+手机专用规则可在「接入 Shadowrocket」里单独填写，按写入顺序优先于共享规则。例如，让 `dingtalk.com` 及其子域名直连，让 `gemini.google.com` 走手机当前选择的代理。
+
+```text
+DOMAIN-SUFFIX,dingtalk.com,DIRECT
+DOMAIN,gemini.google.com,PROXY
+```
+
+可以在 Shadowrocket「数据 → 代理」查看新连接的走向，在「数据 → 统计」查看用量。 [Shadowrocket 功能说明](https://apps.apple.com/us/app/shadowrocket/id932747118)
+
+## iPhone / iPad 日志
+
+### 用 Safari 查看实时记录
+
+1. iPhone 和 Mac 连到同一 Wi-Fi。保持 Shadowrocket 已连接，在「设置 → 诊断」开启「启用日志记录」和「允许访问」，确认「地址」显示手机的局域网 IP 和端口。 [诊断日志设置与接口示例](https://github.com/summerKK/shadowrocket-dashboard#%EF%B8%8F-shadowrocket-配置说明)
+2. 在运行 RouteSift 的 Mac 上，把该地址填入 `.env` 的 `SHADOWROCKET_LOG_URL`，如 `http://192.168.1.50:1082/api/log`。`SHADOWROCKET_LOG_TZ` 用于解释手机日志时间，默认 `Asia/Singapore`。重启 RouteSift。
+3. iPhone 用 Safari 打开 `http://<Mac 的 IP>:18765/#phone-logs`，按 RouteSift 的局域网账号登录。数据来源选「实时采集」，页面会自动更新。Mac 需要持续运行 RouteSift，手机更换 Wi-Fi 地址后需要更新诊断地址。
+
+RouteSift 读取手机诊断流里的分流记录，按域名和时间统计次数。页面分别提供「实时采集」和「文件导入」两个数据来源。
+
+### 导入手机代理日志
+
+在 Shadowrocket「数据 → 代理」打开一份有连接记录的日志，从右上角菜单导出数据库。在 RouteSift「手机日志」上传导出的文件，并确认记录时区。页面显示各域名或 IP 的连接次数、时间趋势、最近连接时间和日志标注的直连、代理或拦截。无法识别的策略显示为「去向未知」。点列表里的目标可查看精确趋势，输入 `dingtalk.com` 并选「含子域名」可一起看子域名。
+
+单个文件最多 32 MiB、10 万条记录。日志导出提供连接记录，页面按次数统计。手机记录保留目标域名或 IP、时间、分流去向和去重所需的记录编号。重复导入会跳过已有记录，完整 URL 与查询参数留在原日志文件中。
 
 ## DeepSeek 一键分析
 
@@ -123,6 +162,8 @@ systemctl --user enable --now flclash-auditor.service
 - **虚拟环境没有 pip**　如果 `.venv` 由 `uv venv` 创建，可以运行 `.venv/bin/python -m ensurepip --upgrade` 补齐 pip，或使用 `uv pip install --python .venv/bin/python -r requirements.txt` 安装依赖。
 - **进程列为空**　在代理客户端开启「查找进程」，然后检查后续采样。
 - **精确域名没有数据**　切换到「含子域名」，检查流量是否发往 API、CDN 等子域名。
+- **手机模块无法更新**　确认 RouteSift 正在运行，iPhone 能访问 Mac 的局域网地址，且订阅地址与「接入 Shadowrocket」里显示的一致。
+- **手机实时日志没连接**　保持 Shadowrocket 已连接，检查诊断日志和「允许访问」是否开启。手机换网后核对诊断页面显示的地址。
 
 [采集](collector.py)负责快照与增量，[存储](storage.py)负责 SQLite 和审核记录，[分析](analyzer.py)与[域名详情](domain_insights.py)负责聚合，[服务](server.py)托管[看板](static/index.html)和[规则导出](rule_exporter.py)。
 

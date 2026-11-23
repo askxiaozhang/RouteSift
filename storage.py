@@ -8,6 +8,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 BUCKET_SECONDS = 300
+SHADOWROCKET_TABLES = {"file": "shadowrocket_connections", "live": "shadowrocket_live_connections"}
 
 TRAFFIC_SCHEMA = """
 CREATE TABLE IF NOT EXISTS traffic_stats (
@@ -45,12 +46,37 @@ CREATE TABLE IF NOT EXISTS rule_decisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     match_type TEXT NOT NULL CHECK (match_type IN ('DOMAIN','DOMAIN-SUFFIX','PROCESS-NAME','IP-CIDR')),
     match_value TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('DIRECT','KEEP_PROXY','REJECT','IGNORE')),
+    action TEXT NOT NULL CHECK (action IN ('DIRECT','KEEP_PROXY','REJECT','IGNORE','MATCH_TARGET')),
     remark TEXT NOT NULL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
     UNIQUE (match_type, match_value)
 );
+
+CREATE TABLE IF NOT EXISTS shadowrocket_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    rules TEXT NOT NULL,
+    version INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO shadowrocket_config (id, rules, version) VALUES (1, '', 0);
+
+CREATE TABLE IF NOT EXISTS shadowrocket_connections (
+    observed_at INTEGER NOT NULL,
+    log_id INTEGER NOT NULL,
+    host TEXT NOT NULL,
+    route_type TEXT NOT NULL CHECK (route_type IN ('PROXY','DIRECT','REJECT','UNKNOWN')),
+    PRIMARY KEY (observed_at, log_id, host, route_type)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS shadowrocket_host_time ON shadowrocket_connections(host, observed_at);
+
+CREATE TABLE IF NOT EXISTS shadowrocket_live_connections (
+    observed_at INTEGER NOT NULL,
+    log_id INTEGER NOT NULL,
+    host TEXT NOT NULL,
+    route_type TEXT NOT NULL CHECK (route_type IN ('PROXY','DIRECT','REJECT','UNKNOWN')),
+    PRIMARY KEY (observed_at, log_id, host, route_type)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS shadowrocket_live_host_time ON shadowrocket_live_connections(host, observed_at);
 """
 
 
@@ -85,6 +111,12 @@ class Store:
             db.execute("PRAGMA journal_mode=WAL")
             db.executescript(SCHEMA)
             db.execute("BEGIN IMMEDIATE")
+            decision_schema = db.execute("SELECT sql FROM sqlite_master WHERE name = 'rule_decisions'").fetchone()[0]
+            if "MATCH_TARGET" not in decision_schema:
+                db.execute("ALTER TABLE rule_decisions RENAME TO rule_decisions_v1")
+                db.execute(decision_schema.replace("'IGNORE'", "'IGNORE','MATCH_TARGET'").replace("IF NOT EXISTS ", ""))
+                db.execute("INSERT INTO rule_decisions SELECT * FROM rule_decisions_v1")
+                db.execute("DROP TABLE rule_decisions_v1")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(traffic_stats)")}
             if columns and "rule_payload" not in columns:
                 db.execute("ALTER TABLE traffic_stats RENAME TO traffic_stats_v1")
@@ -164,3 +196,28 @@ class Store:
     def remove_decision(self, decision_id):
         with self.connect() as db:
             return db.execute("DELETE FROM rule_decisions WHERE id = ?", (decision_id,)).rowcount == 1
+
+    def shadowrocket_config(self):
+        with self.connect() as db:
+            return dict(db.execute("SELECT rules, version FROM shadowrocket_config WHERE id = 1").fetchone())
+
+    def save_shadowrocket_config(self, rules, version):
+        with self.connect() as db:
+            row = db.execute(
+                """
+                UPDATE shadowrocket_config SET rules = ?, version = version + 1
+                WHERE id = 1 AND version = ?
+                RETURNING rules, version
+                """,
+                (rules, version),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def save_shadowrocket_connections(self, events, source="file"):
+        table = SHADOWROCKET_TABLES[source]
+        with self.connect() as db:
+            db.executemany(
+                f"INSERT INTO {table} VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+                events,
+            )
+            return db.total_changes

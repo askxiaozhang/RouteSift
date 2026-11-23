@@ -15,12 +15,15 @@ const views = {
   overview: ["流量概览", "查看本机采集的代理用量、流量归因和突发变化。"],
   domains: ["域名详情", "按时间查看单个域名的用量和实际走向，结合命中规则做审核。"],
   review: ["审核队列", "按代理用量或最近有流量的时间查看目的地址与进程。"],
-  rules: ["规则管理", "管理分流决策，并将本机规则集接入 FlClash。"],
+  "phone-logs": ["手机日志", "查看 Shadowrocket 导入记录，按域名核对连接次数和分流去向。"],
+  rules: ["规则管理", "管理分流决策，导出到 FlClash 或 Shadowrocket。"],
 };
 const state = { view: "overview", mode: "all", page: 1, report: null, decisions: [], requestId: 0 };
 let editing = null;
 let toastTimer;
 let searchTimer;
+let shadowrocketConfig = null;
+let shadowrocketBusy = false;
 
 function el(tag, value = "", className = "") {
   const node = document.createElement(tag);
@@ -86,7 +89,10 @@ function table(selector, columns, rows, empty) {
 async function api(path, method = "GET", body) {
   const options = { method };
   if (method !== "GET") options.headers = { "X-Auditor-Request": "1" };
-  if (body) {
+  if (body instanceof File) {
+    options.headers["Content-Type"] = "application/octet-stream";
+    options.body = body;
+  } else if (body) {
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
   }
@@ -110,7 +116,7 @@ async function refreshStatus() {
       ? "数据库暂时无法写入，采集器将重试。"
       : (status.error || "");
     if ($("#collector-notice").textContent !== message) text("#collector-notice", message);
-    $("#collector-notice").hidden = !message;
+    $("#collector-notice").hidden = !message || state.view === "phone-logs";
   } catch {
     text("#status-label", "审计服务不可达");
     $("#status-dot").classList.remove("online");
@@ -141,6 +147,8 @@ async function loadView() {
       params.set("page", state.page);
       const result = await api(`/api/candidates?${params}`);
       if (id === state.requestId) renderQueue(result);
+    } else if (view === "phone-logs") {
+      await loadPhoneLogs(id);
     } else {
       const decisions = await api("/api/decisions");
       if (id === state.requestId) renderDecisions(decisions);
@@ -168,7 +176,8 @@ function setView(view, mode) {
   }
   text("#page-title", views[view][0]);
   text("#page-description", views[view][1]);
-  $("#range-tools").hidden = view === "rules" || view === "domains";
+  $("#range-tools").hidden = view === "rules" || view === "domains" || view === "phone-logs";
+  $("#collector-notice").hidden = view === "phone-logs" || !$("#collector-notice").textContent;
   updateViewLocation();
   window.scrollTo(0, 0);
   loadView();
@@ -506,7 +515,7 @@ async function saveDecision(event) {
     const saved = await api("/api/decisions", "PUT", body);
     const previous = decisions.find((decision) => sameTarget(decision, saved));
     $("#review-dialog").close();
-    toast("审核已保存", previous
+    toast(saved.desktop_synced ? "规则已保存，FlClash 已同步" : "规则已保存", previous
       ? () => api("/api/decisions", "PUT", previous)
       : () => api(`/api/decisions/${saved.id}`, "DELETE"));
     await loadView();
@@ -526,6 +535,49 @@ async function removeDecision(decision) {
   } catch (error) {
     showError(error);
   }
+}
+
+function syncShadowrocketButtons() {
+  const changed = shadowrocketConfig && $("#shadowrocket-rules").value !== shadowrocketConfig.rules;
+  $("#shadowrocket-fields").disabled = shadowrocketBusy || !shadowrocketConfig;
+  $("#shadowrocket-save").disabled = !changed;
+}
+
+async function updateShadowrocket(action) {
+  if (shadowrocketBusy) return;
+  shadowrocketBusy = true;
+  $("#shadowrocket-error").hidden = true;
+  syncShadowrocketButtons();
+  try {
+    await action();
+  } catch (error) {
+    text("#shadowrocket-error", error.message);
+    $("#shadowrocket-error").hidden = false;
+  } finally {
+    shadowrocketBusy = false;
+    syncShadowrocketButtons();
+  }
+}
+
+function loadShadowrocket() {
+  if (!$("#shadowrocket").open || shadowrocketConfig) return;
+  updateShadowrocket(async () => {
+    shadowrocketConfig = await api("/api/shadowrocket");
+    $("#shadowrocket-rules").value = shadowrocketConfig.rules;
+    $("#shadowrocket-url").value = shadowrocketConfig.subscription_url || "";
+    $("#shadowrocket-remote").hidden = !shadowrocketConfig.subscription_url;
+  });
+}
+
+function saveShadowrocket(event) {
+  event.preventDefault();
+  updateShadowrocket(async () => {
+    shadowrocketConfig = await api("/api/shadowrocket", "PUT", {
+      rules: $("#shadowrocket-rules").value, version: shadowrocketConfig.version,
+    });
+    $("#shadowrocket-rules").value = shadowrocketConfig.rules;
+    text("#shadowrocket-status", "已保存，手机下次更新模块时会读取新规则。");
+  });
 }
 
 function toast(message, undo, label = "撤销") {
@@ -571,12 +623,21 @@ $("#prev").addEventListener("click", () => { state.page -= 1; loadView(); });
 $("#next").addEventListener("click", () => { state.page += 1; loadView(); });
 $("#add-rule").addEventListener("click", () => openDecision());
 $("#decision-form").addEventListener("submit", saveDecision);
+$("#shadowrocket").addEventListener("toggle", loadShadowrocket);
+$("#shadowrocket-rules").addEventListener("input", () => {
+  text("#shadowrocket-status", "");
+  $("#shadowrocket-error").hidden = true;
+  syncShadowrocketButtons();
+});
+$("#shadowrocket-form").addEventListener("submit", saveShadowrocket);
+$("#shadowrocket-url").addEventListener("focus", event => event.target.select());
 for (const id of ["#dialog-close", "#dialog-cancel"]) $(id).addEventListener("click", () => $("#review-dialog").close());
 window.addEventListener("hashchange", followViewLocation);
 new ResizeObserver(drawCharts).observe($("#trend-chart"));
 new ResizeObserver(drawCharts).observe($("#quad-chart"));
 initDomainView();
 initAnalysis();
+initPhoneLogs();
 followViewLocation();
 refreshStatus();
 setInterval(refreshStatus, 5000);

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/styles.css">
   <script defer src="/static/domains.js"></script>
   <script defer src="/static/analysis.js"></script>
+  <script defer src="/static/phone-logs.js"></script>
   <script defer src="/static/app.js"></script>
 </head>
 <body>
@@ -20,6 +21,7 @@
       <button type="button" data-view="overview" aria-current="page"><span aria-hidden="true">◫</span> 流量概览</button>
       <button type="button" data-view="domains"><span aria-hidden="true">⌕</span> 域名详情</button>
       <button type="button" data-view="review"><span aria-hidden="true">≡</span> 审核队列</button>
+      <button type="button" data-view="phone-logs"><span aria-hidden="true">▯</span> 手机日志</button>
       <button type="button" data-view="rules"><span aria-hidden="true">⇆</span> 规则管理</button>
     </nav>
     <div class="rail-status">
@@ -210,16 +212,77 @@
       </article>
     </section>
 
+    <section id="phone-logs" class="view" aria-labelledby="page-title" hidden>
+      <article class="panel integration">
+        <div class="panel-head"><div><h2>Shadowrocket 实时采集</h2><p id="phone-live-status" role="status">正在检查手机诊断连接</p></div></div>
+        <p class="helper">手机和 Mac 连同一个 Wi-Fi。在 Shadowrocket「设置 → 诊断」开启「启用日志记录」和「允许访问」。</p>
+      </article>
+      <details class="panel integration phone-import">
+        <summary>导入 Shadowrocket 日志文件</summary>
+        <p class="helper">打开手机「数据 → 代理」中的日志，导出后在这里上传。</p>
+        <form id="phone-import-form" class="phone-form">
+          <label>代理日志文件<input type="file" id="phone-log-file" required></label>
+          <label>记录时区<input id="phone-log-zone" type="text" maxlength="100" required autocapitalize="off" spellcheck="false" aria-describedby="phone-zone-help"></label>
+          <button type="submit" class="btn primary" id="phone-log-import">导入日志</button>
+        </form>
+        <p id="phone-zone-help" class="helper">选择手机记录日志时使用的时区，如 Asia/Singapore。</p>
+        <p id="phone-import-status" class="helper" role="status" hidden></p>
+        <p id="phone-import-error" class="error-text" role="alert" hidden></p>
+      </details>
+      <article class="panel integration">
+        <div class="panel-head"><div><h2>连接趋势</h2><p>按日志记录次数统计。</p></div></div>
+        <form id="phone-filter-form" class="phone-form">
+          <label>数据来源<select id="phone-log-source"><option value="live">实时采集</option><option value="file">文件导入</option></select></label>
+          <label>域名或 IP<input id="phone-filter-host" type="search" maxlength="253" placeholder="例如 dingtalk.com"></label>
+          <label>匹配范围<select id="phone-filter-scope"><option value="exact">精确匹配</option><option value="suffix" selected>含子域名</option></select></label>
+          <button type="submit" class="btn secondary">查看趋势</button>
+          <button type="reset" class="text-btn">显示全部</button>
+        </form>
+        <p class="helper" id="phone-log-summary" role="status"></p>
+        <div class="legend phone-legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span><span class="reject">拦截</span><span class="unknown">去向未知</span></div>
+        <div class="chart" id="phone-log-chart"><canvas aria-hidden="true"></canvas><p class="chart-empty">暂无匹配的连接记录</p></div>
+        <details><summary>分时明细</summary><div id="phone-log-periods"></div></details>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>连接目标</h2><p id="phone-host-count">按连接次数排序</p></div><a class="btn secondary" href="#rules">管理分流规则</a></div>
+        <div id="phone-log-hosts"></div>
+      </article>
+    </section>
+
     <section id="rules" class="view" aria-labelledby="page-title" hidden>
       <article class="panel integration">
-        <div class="panel-head"><div><h2>接入 FlClash</h2><p>在当前配置的扩展脚本中粘贴覆写脚本。FlClash 每 5 分钟拉取一次规则集，也可手动更新。</p></div><a class="btn primary" href="/rules/flclash-override.js" download>下载覆写脚本</a></div>
+        <div class="panel-head"><div><h2>接入 FlClash</h2><p>当前配置启用覆写脚本后，保存规则会尝试立即同步到 FlClash。</p></div><a class="btn primary" href="/rules/flclash-override.js" download>下载覆写脚本</a></div>
         <div class="provider-links">
           <a href="/rules/my-direct.yaml" target="_blank" rel="noopener">DIRECT</a>
           <a href="/rules/my-reject.yaml" target="_blank" rel="noopener">REJECT</a>
           <a href="/rules/my-keep-proxy.yaml" target="_blank" rel="noopener">KEEP_PROXY</a>
+          <a href="/rules/my-match-target.yaml" target="_blank" rel="noopener">MATCH_TARGET</a>
         </div>
-        <p class="helper">重叠时，保留原分流优先，其次拦截、直连。忽略只影响审核队列。</p>
+        <p class="helper">重叠时，配置兜底策略优先，其次保留原分流、拦截和直连。忽略只影响审核队列。</p>
       </article>
+      <details id="shadowrocket" class="panel integration shadowrocket">
+        <summary>接入 Shadowrocket（iPhone / iPad）</summary>
+        <p class="helper">审核记录里的域名和 IP 直连、拦截规则会自动包含在手机模块里。</p>
+        <div id="shadowrocket-remote" hidden>
+          <label for="shadowrocket-url">远程模块订阅地址</label>
+          <input type="text" id="shadowrocket-url" readonly>
+          <p class="helper">在 Shadowrocket「配置 → 模块 → 添加」粘贴此地址一次。之后可更新模块，或开启模块的自动后台更新。</p>
+        </div>
+        <p class="helper" id="shadowrocket-help">手机专用规则优先。每行一条，支持 DIRECT、PROXY 和 REJECT。</p>
+        <form id="shadowrocket-form">
+          <fieldset id="shadowrocket-fields" disabled>
+            <label for="shadowrocket-rules">iOS 分流规则</label>
+            <textarea id="shadowrocket-rules" rows="6" maxlength="64000" spellcheck="false" autocapitalize="off" autocorrect="off" aria-describedby="shadowrocket-help" placeholder="DOMAIN-SUFFIX,dingtalk.com,DIRECT&#10;DOMAIN,gemini.google.com,PROXY"></textarea>
+            <div class="shadowrocket-actions">
+              <button type="submit" class="btn primary" id="shadowrocket-save" disabled>保存 iOS 规则</button>
+              <a class="btn secondary" href="/rules/routesift-ios.sgmodule" download>下载模块文件</a>
+            </div>
+          </fieldset>
+          <p class="helper" id="shadowrocket-status" role="status"></p>
+          <p class="error-text" id="shadowrocket-error" role="alert" hidden></p>
+        </form>
+        <p class="helper">启用模块后，将 Shadowrocket 首页的「全局路由」设为「配置」。</p>
+      </details>
       <article class="panel table-panel">
         <div class="panel-head"><div><h2>审核记录</h2><p>修改或撤销后，规则集会立即重新生成。</p></div><button type="button" class="btn secondary" id="add-rule">添加审核</button></div>
         <div id="decision-table"></div>
@@ -248,6 +311,7 @@
         <option value="" disabled hidden>选择审核结论</option>
         <option value="DIRECT">直连 · DIRECT</option>
         <option value="KEEP_PROXY">保留原分流 · KEEP_PROXY</option>
+        <option value="MATCH_TARGET">使用配置兜底策略 · MATCH_TARGET</option>
         <option value="REJECT">拦截 · REJECT</option>
         <option value="IGNORE">忽略 · IGNORE</option>
       </select>

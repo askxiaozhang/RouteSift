@@ -1,7 +1,7 @@
 // Bind this script to the active FlClash profile in script extension mode.
 const main = (config) => {
   const base = "http://127.0.0.1:18765/rules";
-  const names = ["reject", "direct", "keep-proxy"];
+  const names = ["reject", "direct", "keep-proxy", "match-target"];
   const providers = { ...config["rule-providers"] };
   for (const name of names) {
     const key = "traffic-auditor-" + name;
@@ -16,11 +16,20 @@ const main = (config) => {
     };
   }
 
+  const originalRules = config.rules || [];
+  const finalMatch = [...originalRules].reverse().find((rule) => /^\s*MATCH\s*,/i.test(rule));
+  if (!finalMatch || !finalMatch.split(",")[1]?.trim()) {
+    throw new Error("RouteSift 需要配置包含 MATCH 兜底规则");
+  }
+  const matchTarget = finalMatch.split(",")[1].trim();
   const local = [
+    `RULE-SET,traffic-auditor-match-target,${matchTarget}`,
     "AND,((RULE-SET,traffic-auditor-reject),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),REJECT",
     "AND,((RULE-SET,traffic-auditor-direct),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),DIRECT",
   ];
   config["rule-providers"] = providers;
-  config.rules = [...local, ...(config.rules || []).filter((rule) => !local.includes(rule))];
+  config.rules = [...local, ...originalRules.filter((rule) =>
+    !local.includes(rule) && !/^RULE-SET,traffic-auditor-match-target,/i.test(rule)
+  )];
   return config;
 };
