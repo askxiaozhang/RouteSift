@@ -7,7 +7,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>WORKSPACE_PATH/.venv/bin/python</string>
-    <string>WORKSPACE_PATH/server.py</string>
+    <string>-m</string>
+    <string>routesift</string>
   </array>
   <key>WorkingDirectory</key>
   <string>WORKSPACE_PATH</string>

@@ -9,7 +9,7 @@ from ipaddress import IPv4Address, ip_network
 from threading import Event
 from urllib.parse import urlsplit
 
-from shadowrocket_logs import connection_host, connection_route
+from routesift.integrations.shadowrocket_logs import connection_host, connection_route
 
 LAN_NETWORKS = tuple(map(ip_network, ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")))
 RULE_START = re.compile(r"^\[([^\]]+)\]\s+((?:tcp|udp|proxy) stream <\d+>).*?\brule\s*=>\s*\{\s*$", re.I)

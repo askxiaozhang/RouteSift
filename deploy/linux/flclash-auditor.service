@@ -3,8 +3,8 @@ Description=FlClash traffic auditor
 
 [Service]
 Type=simple
-WorkingDirectory=%h/network-monitor
-ExecStart=%h/network-monitor/.venv/bin/python %h/network-monitor/server.py
+WorkingDirectory=%h/RouteSift
+ExecStart=%h/RouteSift/.venv/bin/python -m routesift
 Restart=on-failure
 RestartSec=10
 

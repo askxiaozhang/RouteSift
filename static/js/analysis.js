@@ -1,4 +1,8 @@
-"use strict";
+import { api } from "./api.js";
+import { openDecision } from "./decisions.js";
+import { domainLink } from "./domains.js";
+import { state } from "./state.js";
+import { $, button, bytes, el, selectedDays, tag, text, timezone, toast } from "./ui.js";
 
 const analysisActions = {
   DIRECT: "试行直连",
@@ -123,3 +127,5 @@ function initAnalysis() {
     toast("规则已选中，可直接复制");
   });
 }
+
+export { initAnalysis, syncAnalysisScope };

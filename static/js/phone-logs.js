@@ -1,4 +1,10 @@
-"use strict";
+import { api } from "./api.js";
+import { canvas } from "./charts.js";
+import { openDecision } from "./decisions.js";
+import { state } from "./state.js";
+import { $, button, integer, routes, table, text, timezone, trafficTime } from "./ui.js";
+
+let reloadView;
 
 const phoneRouteColors = { PROXY: "#187b60", DIRECT: "#8caeb0", REJECT: "#a66742", UNKNOWN: "#76817c" };
 let phoneReport;
@@ -42,7 +48,7 @@ function renderPhoneLogs(report) {
       $("#phone-filter-host").value = item.host;
       $("#phone-filter-scope").value = "exact";
       phoneFilter = { host: item.host, scope: "exact" };
-      loadView();
+      reloadView();
       $("#phone-filter-host").focus();
     }), item.connections, item.proxy, item.direct, item.reject, item.unknown, phoneLogTime(item.recent),
     button("添加规则", () => {
@@ -112,7 +118,7 @@ async function uploadPhoneLogs(event) {
     $("#phone-import-status").hidden = false;
     input.value = "";
     $("#phone-log-source").value = "file";
-    if (state.view === "phone-logs") await loadView();
+    if (state.view === "phone-logs") await reloadView();
   } catch (error) {
     text("#phone-import-error", error.message);
     $("#phone-import-error").hidden = false;
@@ -122,27 +128,30 @@ async function uploadPhoneLogs(event) {
   }
 }
 
-function initPhoneLogs() {
+function initPhoneLogs(reload) {
+  reloadView = reload;
   $("#phone-log-zone").value = timezone;
   $("#phone-log-source").value = "";
-  $("#phone-log-source").addEventListener("change", loadView);
+  $("#phone-log-source").addEventListener("change", reloadView);
   $("#phone-import-form").addEventListener("submit", uploadPhoneLogs);
   $("#phone-filter-form").addEventListener("submit", event => {
     event.preventDefault();
     phoneFilter = { host: $("#phone-filter-host").value.trim(), scope: $("#phone-filter-scope").value };
-    loadView();
+    reloadView();
   });
   $("#phone-filter-form").addEventListener("reset", () => {
     const source = $("#phone-log-source").value;
     phoneFilter = { host: "", scope: "suffix" };
     requestAnimationFrame(() => {
       $("#phone-log-source").value = source;
-      loadView();
+      reloadView();
     });
   });
   setInterval(() => {
     if (state.view === "phone-logs" && !document.hidden && $("#phone-log-source").value === "live"
-        && !$("#refresh").disabled) loadView();
+        && !$("#refresh").disabled) reloadView();
   }, 5000);
   new ResizeObserver(drawPhoneLogChart).observe($("#phone-log-chart"));
 }
+
+export { initPhoneLogs, loadPhoneLogs };

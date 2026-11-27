@@ -7,9 +7,9 @@
 .venv-cache
 .codegraph
 .cursor
-__pycache__
-*.pyc
-*.pyo
+**/__pycache__
+**/*.pyc
+**/*.pyo
 data
 *.db
 *.db-*
@@ -17,6 +17,7 @@ data
 *.sqlite-*
 *.sqlite3
 *.sqlite3-*
-assets
+docs
 .DS_Store
 docker-compose*.yml
+.idea

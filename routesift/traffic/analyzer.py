@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta
 from statistics import mean, median, pstdev
 
-from rule_exporter import ReviewMatcher, canonical_target, suggested_targets
+from routesift.rule_exporter import ReviewMatcher, canonical_target, suggested_targets
 
 MIB = 1024**2
 

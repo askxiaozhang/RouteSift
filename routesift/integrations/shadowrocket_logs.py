@@ -6,9 +6,9 @@ from contextlib import closing
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from domain_insights import validate_target
-from rule_exporter import target_host
-from storage import SHADOWROCKET_TABLES
+from routesift.traffic.domain_insights import validate_target
+from routesift.rule_exporter import target_host
+from routesift.storage import SHADOWROCKET_TABLES
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 100_000

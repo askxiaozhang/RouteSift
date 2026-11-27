@@ -4,7 +4,7 @@
 
 Local traffic analytics and shared routing rules for FlClash and Shadowrocket. Inspect per-domain bandwidth from Mihomo, monitor iOS connection logs, and reuse reviewed routing decisions across devices.
 
-![RouteSift 的域名详情，含分时流量、策略组和规则命中情况](assets/domain-detail.png)
+![RouteSift 的域名详情，含分时流量、策略组和规则命中情况](docs/images/domain-detail.png)
 
 *截图使用合成流量。*
 
@@ -32,7 +32,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 cp -n .env.example .env
 chmod 600 .env
-.venv/bin/python server.py
+.venv/bin/python -m routesift
 ```
 
 打开 [本机看板](http://127.0.0.1:18765)。如果控制器设了密钥，在启动前把相同的值填进 `.env`。首次连接成功后，看板会显示「采集中」。可以从「流量概览」点击现有目标，也可在「域名详情」输入具体域名。
@@ -87,7 +87,7 @@ Enable your client's loopback controller, run the commands above, then open the 
 | `REJECT` | 命中时拦截，同步 `traffic-auditor-reject` |
 | `IGNORE` | 只影响审核筛选 |
 
-多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](deploy/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
+多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](resources/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
 
 ## 手机和电脑共享分流规则
 
@@ -167,7 +167,7 @@ services:
 
 ### 系统服务
 
-**macOS**　将 [launchd 模板](deploy/com.flclash.auditor.plist) 中的 `WORKSPACE_PATH` 替换为项目绝对路径。创建项目下的 `data/`，将修改后的模板保存到 `~/Library/LaunchAgents/com.flclash.auditor.plist`。退出前台进程后加载。
+**macOS**　将 [launchd 模板](deploy/macos/com.flclash.auditor.plist) 中的 `WORKSPACE_PATH` 替换为项目绝对路径。创建项目下的 `data/`，将修改后的模板保存到 `~/Library/LaunchAgents/com.flclash.auditor.plist`。退出前台进程后加载。
 
 ```sh
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.flclash.auditor.plist"
@@ -175,11 +175,47 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.flclash.audit
 
 停止时运行 `launchctl bootout "gui/$(id -u)/com.flclash.auditor"`。
 
-**Linux**　按实际路径修改 [systemd 用户服务模板](deploy/flclash-auditor.service) 的 `WorkingDirectory` 与 `ExecStart`，保存为 `~/.config/systemd/user/flclash-auditor.service`，退出前台进程后运行下列命令。
+已有常驻服务升级目录结构后，请使用新模板更新已安装的配置。macOS 先 `bootout` 卸载旧任务，再用 `bootstrap` 加载新配置；`kickstart` 只重启已加载的配置。
+
+**Linux**　按实际路径修改 [systemd 用户服务模板](deploy/linux/flclash-auditor.service) 的 `WorkingDirectory` 与 `ExecStart`，保存为 `~/.config/systemd/user/flclash-auditor.service`，退出前台进程后运行下列命令。
 
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now flclash-auditor.service
+```
+
+已有 Linux 服务更新模板并执行 `daemon-reload` 后，运行 `systemctl --user restart flclash-auditor.service` 应用新的启动参数。
+
+## 项目结构
+
+```text
+routesift/           Python 应用包（python -m routesift）
+  app.py             FastAPI 组装、静态文件和采集任务生命周期
+  config.py          环境变量、配置校验和项目根目录路径
+  security.py        本机与局域网访问控制
+  storage.py         SQLite 表结构和持久化
+  rule_exporter.py   规则匹配、目标规范化和 Mihomo 规则导出
+  api/               流量、审核、规则、AI 与手机日志 HTTP 接口
+  traffic/           连接采集、流量聚合和域名详情
+  integrations/      Mihomo、DeepSeek 和 Shadowrocket 适配
+static/
+  index.html         页面入口
+  css/               页面样式
+  js/                原生 ES Modules：入口、图表和各功能页面
+resources/           运行时模板（FlClash 覆写脚本）
+deploy/macos/        launchd 服务模板
+deploy/linux/        systemd 服务模板
+tests/               回归测试
+docs/images/         文档截图
+data/                本地数据库和日志（不提交）
+```
+
+前端由 `static/js/app.js` 初始化，各页面通过 `import` / `export` 声明依赖。`state.js` 保存页面共享状态，`decisions.js` 负责各页面共用的审核弹窗。`.env`、`data/`、`static/` 和 `resources/` 均以项目根目录为基准定位。
+
+本地验证：
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 ## 排查与开发
@@ -192,7 +228,7 @@ systemctl --user enable --now flclash-auditor.service
 - **手机模块无法更新**　确认 RouteSift 正在运行，iPhone 能访问 Mac 的局域网地址，且订阅地址与「接入 Shadowrocket」里显示的一致。
 - **手机实时日志没连接**　保持 Shadowrocket 已连接，检查诊断日志和「允许访问」是否开启。手机换网后核对诊断页面显示的地址。
 
-[采集](collector.py)负责快照与增量，[存储](storage.py)负责 SQLite 和审核记录，[分析](analyzer.py)与[域名详情](domain_insights.py)负责聚合，[服务](server.py)托管[看板](static/index.html)和[规则导出](rule_exporter.py)。
+[采集](routesift/traffic/collector.py)负责快照与增量，[存储](routesift/storage.py)负责 SQLite 和审核记录，[分析](routesift/traffic/analyzer.py)与[域名详情](routesift/traffic/domain_insights.py)负责聚合，[服务](routesift/app.py)托管[看板](static/index.html)和[规则导出](routesift/rule_exporter.py)。
 
 ## License
 

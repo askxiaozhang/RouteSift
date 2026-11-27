@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from analyzer import report
-from storage import Store
+from routesift.traffic.analyzer import report
+from routesift.storage import Store
 
 
 class ReportTrendTests(unittest.TestCase):

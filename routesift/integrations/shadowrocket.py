@@ -2,7 +2,7 @@
 
 from ipaddress import ip_network
 
-from rule_exporter import canonical_target, domain
+from routesift.rule_exporter import canonical_target, domain
 
 DOMAIN_TYPES = {"DOMAIN", "DOMAIN-SUFFIX"}
 NETWORK_TYPES = {"IP-CIDR": 4, "IP-CIDR6": 6}
