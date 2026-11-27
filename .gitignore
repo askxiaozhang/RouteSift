@@ -14,3 +14,4 @@ data/
 *.sqlite3-*
 .DS_Store
 docker-compose.override.yml
+.idea/
