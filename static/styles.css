@@ -81,7 +81,7 @@ main { margin-left: 208px; padding: 35px clamp(20px, 3.8vw, 54px) 45px; max-widt
 .panel-head { margin-bottom: 14px; }
 .panel-head p { font-size: 12px; }
 .breakdown { min-height: 281px; }
-.chart { position: relative; height: 188px; }
+.chart { position: relative; height: 188px; overflow: hidden; background: var(--white); isolation: isolate; }
 .chart canvas { display: block; width: 100%; height: 100%; }
 .chart-empty { position: absolute; inset: 43% 0 auto; margin: 0 auto; width: max-content; max-width: 90%; padding: 6px 10px; background: var(--white); color: var(--muted); font-size: 12px; }
 .legend { display: flex; gap: 11px; white-space: nowrap; color: var(--muted); margin-top: 2px; font-size: 12px; }
@@ -218,10 +218,11 @@ dialog textarea { resize: vertical; }
 .chart-tooltip {
   position: absolute;
   top: 7px;
+  bottom: 7px;
   z-index: 1;
   pointer-events: none;
   width: max-content;
-  max-width: 100%;
+  max-width: min(100%, 176px);
   color: #eaffed;
   background: var(--rail);
   border-radius: 6px;
@@ -229,6 +230,8 @@ dialog textarea { resize: vertical; }
   font: 11px/1.55 var(--mono);
 }
 .chart-tooltip strong, .chart-tooltip span { display: block; }
+.chart-tooltip strong { margin-bottom: 2px; white-space: nowrap; }
+.chart-tooltip .swatch::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; background: var(--swatch); }
 #domain-time-table .table-wrap { max-height: 370px; }
 #domain-time-table th { position: sticky; top: 0; }
 #domain-review-status .tag { margin: 0 4px 4px 0; }

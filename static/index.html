@@ -65,8 +65,11 @@
             <div><h2>每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
             <div class="legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span></div>
           </div>
-          <div class="chart" id="trend-chart"><canvas aria-hidden="true"></canvas><p class="chart-empty" hidden>等待第一批采样数据</p></div>
-          <details><summary>每日明细</summary><div id="trend-table"></div></details>
+          <div class="chart" id="trend-chart" tabindex="0" role="group" aria-label="每日流量图，鼠标悬停或用左右方向键查看当日明细">
+            <canvas aria-hidden="true"></canvas>
+            <p class="chart-empty" hidden>等待第一批采样数据</p>
+            <div id="trend-tooltip" class="chart-tooltip" role="status" hidden></div>
+          </div>
         </article>
         <article class="panel breakdown">
           <div class="panel-head"><div><h2>流量去向</h2><p>按代理链分类</p></div></div>

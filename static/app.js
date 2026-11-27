@@ -274,12 +274,6 @@ function renderOverview(report) {
   text("#trend-range", `${report.days[0]} 至 ${report.days.at(-1)} · ${timezone}`);
   breakdown(report.totals);
 
-  table("#trend-table", [
-    { label: "日期" }, { label: "代理", numeric: true }, { label: "直连", numeric: true }, { label: "采样窗口", numeric: true },
-  ], report.trend.map((item) => [
-    item.day, bytes(item.traffic.PROXY), bytes(item.traffic.DIRECT), item.sample_buckets,
-  ]), "暂无采样数据。");
-
   ranking("#domain-rank", report.domains, "domain");
   ranking("#process-rank", report.processes, "process");
   ranking("#match-rank", report.match, "match");
@@ -322,6 +316,8 @@ function canvas(selector) {
   return { ctx, width, height };
 }
 
+const trendView = { plot: null, point: null };
+
 function trendChart(items) {
   const area = canvas("#trend-chart");
   if (!area) return;
@@ -335,6 +331,7 @@ function trendChart(items) {
   const step = 1024 ** Math.floor(Math.log(max) / Math.log(1024));
   const ceiling = Math.max(4, Math.ceil(max / (step * 4)) * step * 4);
   const barWidth = Math.min(30, gap * .63);
+  trendView.plot = { left, span, gap };
   $("#trend-chart .chart-empty").hidden = items.some((item) => item.sample_buckets);
   for (let level = 0; level <= 4; level += 1) {
     const y = bottom - ((bottom - top) * level / 4);
@@ -345,8 +342,13 @@ function trendChart(items) {
     ctx.fillRect(left, y, span, 1);
   }
   const every = Math.max(1, Math.ceil(items.length / Math.max(1, Math.floor(span / 55))));
+  const active = trendView.point === null ? null : items[trendView.point];
   items.forEach((item, index) => {
     const x = left + gap * (index + .5);
+    if (item === active) {
+      ctx.fillStyle = "#eef3ec";
+      ctx.fillRect(left + gap * index, top, gap, bottom - top);
+    }
     let y = bottom;
     for (const [route, color] of [["PROXY", "#187b60"], ["DIRECT", "#8caeb0"]]) {
       const bar = (item.traffic[route] || 0) / ceiling * (bottom - top);
@@ -359,12 +361,57 @@ function trendChart(items) {
       ctx.fillRect(x - barWidth / 2, bottom - 2, barWidth, 2);
     }
     if (index % every === 0 || index === items.length - 1) {
-      if (index !== items.length - 1 && items.length - 1 - index < every) return;
       ctx.fillStyle = "#536462";
       ctx.textAlign = "center";
       ctx.fillText(item.day.slice(5), x, height - 8);
     }
   });
+  if (active) {
+    const mark = left + (trendView.point + .5) * gap;
+    ctx.fillStyle = "#335d50";
+    ctx.fillRect(mark, top, 1, bottom - top);
+    const tooltip = $("#trend-tooltip");
+    const position = mark + tooltip.offsetWidth + 12 <= width ? mark + 10 : mark - tooltip.offsetWidth - 10;
+    tooltip.style.left = Math.max(0, position) + "px";
+  }
+}
+
+function dayBreakdown(items) {
+  const total = (route) => items.reduce((sum, item) => sum + (item.traffic[route] || 0), 0);
+  const proxy = total("PROXY");
+  const direct = total("DIRECT");
+  return proxy + direct ? proxy / (proxy + direct) : null;
+}
+
+function selectTrendPoint(index) {
+  const items = state.report?.trend;
+  if (!items?.length) return;
+  const bounded = Math.max(0, Math.min(index, items.length - 1));
+  if (bounded === trendView.point) return;
+  trendView.point = bounded;
+  const item = items[bounded];
+  const proxy = item.traffic.PROXY || 0;
+  const direct = item.traffic.DIRECT || 0;
+  const share = dayBreakdown([item]);
+  const proxySwatch = el("span", `代理 ${bytes(proxy)} · ${share === null ? "—" : percent(share)}`, "swatch proxy");
+  const directSwatch = el("span", `直连 ${bytes(direct)}`, "swatch direct");
+  const tooltip = $("#trend-tooltip");
+  tooltip.replaceChildren(
+    el("strong", item.day),
+    proxySwatch,
+    directSwatch,
+    el("span", `合计 ${bytes(proxy + direct)}`),
+    el("span", item.sample_buckets ? `${integer.format(item.sample_buckets)} 个采样窗口` : "该日无采样"),
+  );
+  tooltip.hidden = false;
+  trendChart(items);
+}
+
+function clearTrendPoint() {
+  if (trendView.point === null) return;
+  trendView.point = null;
+  $("#trend-tooltip").hidden = true;
+  if (state.report) trendChart(state.report.trend);
 }
 
 function quadChart(data) {
@@ -609,8 +656,8 @@ for (const link of $$("[data-go]")) {
     setView("review", link.dataset.go === "match" ? "match" : "all");
   });
 }
-$("#refresh").addEventListener("click", () => { refreshStatus(); loadView(); });
-$("#days").addEventListener("change", () => { state.page = 1; loadView(); });
+$("#refresh").addEventListener("click", () => { refreshStatus(); clearTrendPoint(); loadView(); });
+$("#days").addEventListener("change", () => { state.page = 1; clearTrendPoint(); loadView(); });
 $("#overview-reviewed").addEventListener("change", loadView);
 for (const selector of ["#review-reviewed", "#review-sort"]) {
   $(selector).addEventListener("change", () => { state.page = 1; loadView(); });
@@ -633,6 +680,30 @@ $("#shadowrocket-form").addEventListener("submit", saveShadowrocket);
 $("#shadowrocket-url").addEventListener("focus", event => event.target.select());
 for (const id of ["#dialog-close", "#dialog-cancel"]) $(id).addEventListener("click", () => $("#review-dialog").close());
 window.addEventListener("hashchange", followViewLocation);
+const trendChartArea = $("#trend-chart");
+const selectTrendByPointer = (event) => {
+  const plot = trendView.plot;
+  const count = state.report?.trend.length;
+  if (!plot || !count) return;
+  const relative = event.clientX - trendChartArea.getBoundingClientRect().left - plot.left;
+  if (relative < 0 || relative > plot.span) clearTrendPoint();
+  else selectTrendPoint(Math.min(count - 1, Math.floor(relative / plot.gap)));
+};
+trendChartArea.addEventListener("pointermove", selectTrendByPointer);
+trendChartArea.addEventListener("pointerdown", selectTrendByPointer);
+trendChartArea.addEventListener("pointerleave", clearTrendPoint);
+trendChartArea.addEventListener("blur", clearTrendPoint);
+trendChartArea.addEventListener("keydown", (event) => {
+  const count = state.report?.trend.length;
+  if (!count) return;
+  const current = trendView.point ?? count - 1;
+  const next = { ArrowLeft: current - 1, ArrowRight: trendView.point === null ? 0 : current + 1, Home: 0, End: count - 1 };
+  if (Object.hasOwn(next, event.key)) {
+    event.preventDefault();
+    selectTrendPoint(next[event.key]);
+  }
+  if (event.key === "Escape") clearTrendPoint();
+});
 new ResizeObserver(drawCharts).observe($("#trend-chart"));
 new ResizeObserver(drawCharts).observe($("#quad-chart"));
 initDomainView();
