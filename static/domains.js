@@ -56,7 +56,7 @@ function adoptDomainHash(queryString) {
 function domainLink(host, scope = "exact") {
   if (!host) return "未知目标";
   const values = state.view === "domains" && domainView.result
-    ? domainView.result : defaultDomainDates(Number($("#days").value));
+    ? domainView.result : defaultDomainDates(selectedDays());
   const link = el("a", host, "domain-link");
   link.href = domainHash({
     host, scope: host.includes(":") || /^\d+(?:\.\d+){3}$/.test(host) ? "exact" : scope,

@@ -64,6 +64,23 @@ main { margin-left: 208px; padding: 35px clamp(20px, 3.8vw, 54px) 45px; max-widt
 .btn.secondary:hover:not(:disabled), select:hover { background: #eaf0e8; }
 .btn.primary { background: var(--pine); border-color: var(--pine); color: #fff; }
 .btn.primary:hover:not(:disabled) { background: #134435; }
+#range-tools { flex-wrap: wrap; }
+#days-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.period-switch { position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 2px; border-radius: 4px; background: #e6ebe5; }
+.period-switch::before { content: ""; position: absolute; z-index: -1; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / 4); border-radius: 3px; background: var(--white); box-shadow: 0 0 0 1px #1927291a; transition: transform .1s cubic-bezier(.445, .05, .55, .95); }
+.period-switch:has(input[value="7"]:checked)::before { transform: translateX(100%); }
+.period-switch:has(input[value="14"]:checked)::before { transform: translateX(200%); }
+.period-switch:has(input[value="30"]:checked)::before { transform: translateX(300%); }
+.period-switch label { position: relative; display: flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 14px; border-radius: 3px; font-size: 14px; cursor: pointer; }
+.period-switch label + label::before { content: ""; position: absolute; top: 7px; bottom: 7px; left: 0; width: 1px; background: #ccd6cc; }
+.period-switch label:has(input:checked)::before, .period-switch label:has(input:checked) + label::before { opacity: 0; }
+.period-switch label:has(input:checked) { color: var(--ink); font-weight: 500; }
+.period-switch label:hover { color: var(--ink); }
+.period-switch label:has(input:focus-visible) { outline: 2px solid #168464; outline-offset: 2px; }
+.period-switch input { position: absolute; width: 1px; height: 1px; min-height: 0; margin: 0; padding: 0; border: 0; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .period-switch::before { transition: none; }
+}
 .text-btn { border: 0; border-radius: 4px; padding: 4px 1px; background: transparent; color: var(--pine); font-weight: 600; flex-shrink: 0; }
 .text-btn:hover { text-decoration: underline; }
 .notice { background: #fcf4df; color: #604413; border: 1px solid #e6d3a7; padding: 10px 13px; border-radius: 7px; margin: 0 0 16px; line-height: 1.55; }
@@ -183,6 +200,9 @@ dialog textarea { resize: vertical; }
 }
 @media (max-width: 600px) {
   .page-head { flex-wrap: wrap; align-items: start; }
+  #range-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+  #days-label { grid-column: 1 / -1; }
+  .period-switch label { min-height: 40px; padding-inline: 6px; font-size: 12px; }
   .brand strong { font-size: 15px; }
   .rail { gap: 8px; }
   .rail nav { order: 1; width: 100%; flex-wrap: wrap; }

@@ -38,13 +38,13 @@
         <p id="page-description">查看本机采集的代理用量、流量归因和突发变化。</p>
       </div>
       <div id="range-tools" class="tools">
-        <label for="days">统计周期</label>
-        <select id="days">
-          <option value="1">今天</option>
-          <option value="7" selected>近 7 天</option>
-          <option value="14">近 14 天</option>
-          <option value="30">近 30 天</option>
-        </select>
+        <span id="days-label">统计周期</span>
+        <div id="days" class="period-switch" role="radiogroup" aria-labelledby="days-label">
+          <label><input type="radio" name="days" value="1"><span>今天</span></label>
+          <label><input type="radio" name="days" value="7" checked><span>近 7 天</span></label>
+          <label><input type="radio" name="days" value="14"><span>近 14 天</span></label>
+          <label><input type="radio" name="days" value="30"><span>近 30 天</span></label>
+        </div>
         <button type="button" class="btn secondary" id="refresh">刷新</button>
       </div>
     </header>
@@ -62,7 +62,7 @@
       <div class="trend-grid">
         <article class="panel">
           <div class="panel-head">
-            <div><h2>每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
+            <div><h2 id="trend-title">每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
             <div class="legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span></div>
           </div>
           <div class="chart" id="trend-chart" tabindex="0" role="group" aria-label="每日流量图，鼠标悬停或用左右方向键查看当日明细">

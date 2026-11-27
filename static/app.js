@@ -6,6 +6,7 @@ const text = (selector, value) => { $(selector).textContent = value; };
 const integer = new Intl.NumberFormat("zh-CN");
 const clock = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Singapore";
+const hourClock = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone });
 const trafficTime = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone,
 });
@@ -123,8 +124,12 @@ async function refreshStatus() {
   }
 }
 
+function selectedDays() {
+  return Number($("#days input:checked").value);
+}
+
 function query(reviewed) {
-  return new URLSearchParams({ days: $("#days").value, tz: timezone, include_reviewed: reviewed });
+  return new URLSearchParams({ days: selectedDays(), tz: timezone, include_reviewed: reviewed });
 }
 
 async function loadView() {
@@ -269,9 +274,16 @@ function renderOverview(report) {
   text("#total-connections", integer.format(report.connections));
   text("#proxy-io", `↑ ${bytes(report.uploads.PROXY)} / ↓ ${bytes(report.downloads.PROXY)}`);
   text("#direct-io", `↑ ${bytes(report.uploads.DIRECT)} / ↓ ${bytes(report.downloads.DIRECT)}`);
-  const covered = report.trend.filter((item) => item.sample_buckets).length;
+  const hourly = report.trend_grain === "hour";
+  const covered = new Set(report.trend.filter((item) => item.sample_buckets).map((item) => item.day)).size;
   text("#coverage", `覆盖 ${covered} / ${report.days.length} 个自然日`);
-  text("#trend-range", `${report.days[0]} 至 ${report.days.at(-1)} · ${timezone}`);
+  text("#trend-title", hourly ? "今日流量" : "每日流量");
+  text("#trend-range", hourly
+    ? `${report.days[0]} · 00:00–24:00 · ${timezone}`
+    : `${report.days[0]} 至 ${report.days.at(-1)} · ${timezone}`);
+  $("#trend-chart").setAttribute("aria-label", hourly
+    ? "今日流量图，鼠标悬停或用左右方向键查看每小时明细"
+    : "每日流量图，鼠标悬停或用左右方向键查看当日明细");
   breakdown(report.totals);
 
   ranking("#domain-rank", report.domains, "domain");
@@ -322,6 +334,7 @@ function trendChart(items) {
   const area = canvas("#trend-chart");
   if (!area) return;
   const { ctx, width, height } = area;
+  const hourly = state.report.trend_grain === "hour";
   const left = 62;
   const top = 12;
   const bottom = height - 25;
@@ -360,12 +373,17 @@ function trendChart(items) {
       ctx.fillStyle = "#c9d1c9";
       ctx.fillRect(x - barWidth / 2, bottom - 2, barWidth, 2);
     }
-    if (index % every === 0 || index === items.length - 1) {
+    if (index % every === 0 || (!hourly && index === items.length - 1)) {
       ctx.fillStyle = "#536462";
-      ctx.textAlign = "center";
-      ctx.fillText(item.day.slice(5), x, height - 8);
+      ctx.textAlign = hourly && index === 0 ? "left" : "center";
+      ctx.fillText(hourly ? hourClock.format(item.start_ts * 1000) : item.day.slice(5), hourly ? left + gap * index : x, height - 8);
     }
   });
+  if (hourly) {
+    ctx.fillStyle = "#536462";
+    ctx.textAlign = "right";
+    ctx.fillText("24:00", left + span, height - 8);
+  }
   if (active) {
     const mark = left + (trendView.point + .5) * gap;
     ctx.fillStyle = "#335d50";
@@ -390,6 +408,10 @@ function selectTrendPoint(index) {
   if (bounded === trendView.point) return;
   trendView.point = bounded;
   const item = items[bounded];
+  const hourly = state.report.trend_grain === "hour";
+  const label = hourly
+    ? `${item.day} ${hourClock.format(item.start_ts * 1000)}–${bounded === items.length - 1 ? "24:00" : hourClock.format(item.end_ts * 1000)}`
+    : item.day;
   const proxy = item.traffic.PROXY || 0;
   const direct = item.traffic.DIRECT || 0;
   const share = dayBreakdown([item]);
@@ -397,11 +419,11 @@ function selectTrendPoint(index) {
   const directSwatch = el("span", `直连 ${bytes(direct)}`, "swatch direct");
   const tooltip = $("#trend-tooltip");
   tooltip.replaceChildren(
-    el("strong", item.day),
+    el("strong", label),
     proxySwatch,
     directSwatch,
     el("span", `合计 ${bytes(proxy + direct)}`),
-    el("span", item.sample_buckets ? `${integer.format(item.sample_buckets)} 个采样窗口` : "该日无采样"),
+    el("span", item.sample_buckets ? `${integer.format(item.sample_buckets)} 个采样窗口` : hourly ? "该小时无采样" : "该日无采样"),
   );
   tooltip.hidden = false;
   trendChart(items);

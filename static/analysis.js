@@ -10,7 +10,7 @@ let analysisResultScope = "";
 let analysisInProgress = false;
 
 function analysisFilters() {
-  return { days: Number($("#days").value), tz: timezone, mode: state.mode };
+  return { days: selectedDays(), tz: timezone, mode: state.mode };
 }
 
 function analysisMessage(message) {

@@ -53,6 +53,31 @@ def coverage(db, days):
     )
 
 
+def hourly_trend(db, window):
+    day, start, end = window
+    points = [
+        {"day": day, "start_ts": first, "end_ts": min(first + 3600, end),
+         "traffic": {}, "sample_buckets": 0}
+        for first in range(start, end, 3600)
+    ]
+    for row in db.execute(
+        """SELECT (bucket_ts - ?) / 3600 AS hour, route_type,
+                  SUM(up_bytes + down_bytes) AS bytes
+           FROM traffic_stats WHERE bucket_ts >= ? AND bucket_ts < ?
+           GROUP BY hour, route_type""",
+        (start, start, end),
+    ):
+        points[row["hour"]]["traffic"][row["route_type"]] = row["bytes"]
+    for row in db.execute(
+        """SELECT (bucket_ts - ?) / 3600 AS hour, COUNT(*) AS count
+           FROM sample_buckets WHERE bucket_ts >= ? AND bucket_ts < ?
+           GROUP BY hour""",
+        (start, start, end),
+    ):
+        points[row["hour"]]["sample_buckets"] = row["count"]
+    return points
+
+
 def top(counter, limit=30):
     return sorted(counter.items(), key=lambda item: (-item[1], item[0]))[:limit]
 
@@ -167,6 +192,10 @@ def report(store, days, zone, include_reviewed, now=None):
             if row["rule_type"] == "MATCH":
                 match_host[host] += count
 
+        trend = hourly_trend(db, windows[-1]) if days == 1 else [
+            {"day": day, "traffic": daily[day], "sample_buckets": covered[day]} for day in selected
+        ]
+
     processes = pareto(process_bytes)
     for item in processes:
         item["domains"] = [
@@ -178,7 +207,8 @@ def report(store, days, zone, include_reviewed, now=None):
         "uploads": uploads,
         "downloads": downloads,
         "connections": total_connections,
-        "trend": [{"day": day, "traffic": daily[day], "sample_buckets": covered[day]} for day in selected],
+        "trend_grain": "hour" if days == 1 else "day",
+        "trend": trend,
         "domains": pareto(domain_bytes),
         "processes": processes,
         "match": [{"host": host, "bytes": count} for host, count in top(match_host)],
