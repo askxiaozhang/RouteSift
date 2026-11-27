@@ -35,4 +35,4 @@
 }
 ```
 
-harness 负责启动 stdio 进程，连接后应发现四个只读工具。该进程通过现有 HTTP 服务查询，不直接打开数据库。模型选择和凭据由 harness 管理。
+harness 负责启动 stdio 进程，连接后应发现六个工具（四个只读查询工具及 `save_decision`、`undo_decision`）。该进程通过现有 HTTP 服务查询与写入，不直接打开数据库。模型选择和凭据由 harness 管理。

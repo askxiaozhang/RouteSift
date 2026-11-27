@@ -44,6 +44,37 @@ class FixtureHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(payload).encode())
 
+    def do_PUT(self):
+        parsed = urlsplit(self.path)
+        self.server.seen.append((self.command, parsed.path, {}))
+        if self.headers.get("x-auditor-request") != "1":
+            self._send_json(403, {"detail": "missing header"})
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        body = json.loads(self.rfile.read(length).decode("utf-8"))
+        if parsed.path == "/api/decisions":
+            self._send_json(200, {"id": 9, **body, "desktop_synced": True})
+            return
+        self._send_json(404, {"detail": "not found"})
+
+    def do_DELETE(self):
+        parsed = urlsplit(self.path)
+        self.server.seen.append((self.command, parsed.path, {}))
+        if self.headers.get("x-auditor-request") != "1":
+            self._send_json(403, {"detail": "missing header"})
+            return
+        if parsed.path == "/api/decisions/9":
+            self.send_response(204)
+            self.end_headers()
+            return
+        self._send_json(404, {"detail": "这条审核记录已撤销"})
+
+    def _send_json(self, status, payload):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode())
+
     def log_message(self, *args):
         pass
 
@@ -73,8 +104,18 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             transport = StdioServerParameters(command=sys.executable, args=[str(script), "--url", self.url], cwd=cwd)
             async with Client(transport) as client:
                 tools = (await client.list_tools()).tools
-                self.assertEqual({tool.name for tool in tools}, {"get_review_context", "list_review_candidates", "get_domain_detail", "list_decisions"})
-                self.assertTrue(all(tool.annotations.read_only_hint and not tool.annotations.destructive_hint for tool in tools))
+                by_name = {tool.name: tool for tool in tools}
+                self.assertEqual(
+                    set(by_name),
+                    {"get_review_context", "list_review_candidates", "get_domain_detail", "list_decisions", "save_decision", "undo_decision"},
+                )
+                for name in ("get_review_context", "list_review_candidates", "get_domain_detail", "list_decisions"):
+                    self.assertTrue(by_name[name].annotations.read_only_hint)
+                    self.assertFalse(by_name[name].annotations.destructive_hint)
+                self.assertFalse(by_name["save_decision"].annotations.read_only_hint)
+                self.assertFalse(by_name["save_decision"].annotations.destructive_hint)
+                self.assertFalse(by_name["undo_decision"].annotations.read_only_hint)
+                self.assertTrue(by_name["undo_decision"].annotations.destructive_hint)
                 context = await client.call_tool("get_review_context", {"mode": "match"})
                 self.assertFalse(context.is_error)
                 self.assertEqual(context.structured_content["candidates"][0]["proxy_bytes"], 1024)
@@ -106,7 +147,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         transport = StdioServerParameters(command=sys.executable, args=[str(script), "--url", self.url])
         async with Client(transport, mode="legacy") as client:
             tools = await client.list_tools()
-            self.assertEqual(len(tools.tools), 4)
+            self.assertEqual(len(tools.tools), 6)
             result = await client.call_tool("get_review_context")
             self.assertFalse(result.is_error)
             self.assertEqual(result.structured_content["byte_unit"], "bytes")
@@ -131,6 +172,34 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 result = await client.call_tool("get_review_context")
                 self.assertTrue(result.is_error)
                 self.assertIn("请先启动", result.content[0].text)
+
+    async def test_save_and_undo_decision_tools(self):
+        async with Client(create_server(self.url)) as client:
+            saved = await client.call_tool("save_decision", {
+                "match_type": "DOMAIN",
+                "match_value": "example.com",
+                "action": "DIRECT",
+                "remark": "via mcp",
+            })
+            self.assertFalse(saved.is_error)
+            self.assertEqual(saved.structured_content["id"], 9)
+            self.assertTrue(saved.structured_content["desktop_synced"])
+
+            undone = await client.call_tool("undo_decision", {"decision_id": 9})
+            self.assertFalse(undone.is_error)
+            self.assertEqual(undone.structured_content, {"deleted": True, "decision_id": 9})
+
+            missing = await client.call_tool("undo_decision", {"decision_id": 999})
+            self.assertTrue(missing.is_error)
+            self.assertIn("404", missing.content[0].text)
+
+            invalid = await client.call_tool("undo_decision", {"decision_id": 0})
+            self.assertTrue(invalid.is_error)
+
+        self.assertEqual(
+            [(method, path) for method, path, _ in self.http.seen],
+            [("PUT", "/api/decisions"), ("DELETE", "/api/decisions/9"), ("DELETE", "/api/decisions/999")],
+        )
 
     def test_server_url_must_be_loopback_without_credentials_or_paths(self):
         for url in ["https://example.com", "http://192.168.1.10:18765", "file:///tmp/test", "http://user:pass@localhost", "http://localhost/path", "http://localhost:bad"]:

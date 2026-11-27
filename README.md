@@ -163,6 +163,8 @@ uv pip install --python .venv/bin/python -r requirements-mcp.txt
 | `list_review_candidates` | 按域名、IP 或进程搜索候选，可按流量或最近活动排序，支持分页及显示已审核目标。 |
 | `get_domain_detail` | 指定 `host`、`start`、`end`，查看精确域名或含子域名的时间序列、实际分流和规则归因。支持 5 分钟、小时、日粒度。 |
 | `list_decisions` | 按 `offset`、`limit` 分页读取已保存的审核结论与备注。 |
+| `save_decision` | 保存或更新指定目标（`DOMAIN`、`DOMAIN-SUFFIX`、`PROCESS-NAME`、`IP-CIDR`）的审核结论，并触发刷新已加载的 Mihomo 规则集。 |
+| `undo_decision` | 按 `decision_id` 撤销已保存的审核记录，并触发刷新已加载的 Mihomo 规则集。 |
 
 审核上下文接口为 `GET /api/review-context`，复用本地统计逻辑，周期限制为 1–30 天，候选上限为 100。上下文优先列出规范域名，IP 目标可通过候选工具查询。字节数据标明单位和时区；无采样不代表无流量，首次观测也可能包含此前累计用量。
 
