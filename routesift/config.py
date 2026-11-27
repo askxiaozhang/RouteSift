@@ -5,7 +5,7 @@ from ipaddress import IPv4Address, ip_network
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = ROOT / "static"
@@ -71,14 +71,3 @@ DATABASE_PATH = (ROOT / Path(os.environ.get("AUDITOR_DB", "data/traffic.db")).ex
 MIHOMO_SECRET = os.environ.get("MIHOMO_SECRET", "")
 PHONE_LOG_URL = os.environ.get("SHADOWROCKET_LOG_URL", "").strip()
 PHONE_LOG_TZ = os.environ.get("SHADOWROCKET_LOG_TZ", "Asia/Singapore")
-
-
-def deepseek_settings():
-    env_file = os.getenv("DEEPSEEK_ENV_FILE", "").strip()
-    shared = dotenv_values(Path(env_file).expanduser()) if env_file else {}
-    return tuple(
-        (os.getenv(name) or shared.get(name) or default).strip()
-        for name, default in (
-            ("DEEPSEEK_API_KEY", ""), ("DEEPSEEK_BASE_URL", "https://api.deepseek.com"), ("DEEPSEEK_MODEL", "deepseek-flash"),
-        )
-    )

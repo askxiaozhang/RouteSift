@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from routesift.api import analysis, reviews, rules, shadowrocket, traffic
+from routesift.api import reviews, rules, shadowrocket, traffic
 from routesift.config import DATABASE_PATH, HOST, LAN_HOST, MIHOMO_SECRET, PHONE_LOG_TZ, PHONE_LOG_URL, STATIC_DIR, controller_url
 from routesift.integrations import shadowrocket_live
 from routesift.security import protect_dashboard
@@ -59,7 +59,7 @@ def create_app():
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=[HOST, "localhost", *([LAN_HOST] if LAN_HOST else [])])
     app.middleware("http")(protect_dashboard)
     app.add_api_route("/", index, methods=["GET"])
-    for module in (traffic, reviews, analysis, rules, shadowrocket):
+    for module in (traffic, reviews, rules, shadowrocket):
         app.include_router(module.router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app

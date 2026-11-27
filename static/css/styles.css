@@ -266,21 +266,3 @@ dialog textarea { resize: vertical; }
   .rail nav button span { display: none; }
   .domain-heading { flex-wrap: wrap; }
 }
-
-.analysis-panel { margin-bottom: 12px; }
-.analysis-panel .panel-head { margin-bottom: 0; }
-.analysis-totals { display: flex; flex-wrap: wrap; gap: 12px 25px; margin: 15px 0 12px; }
-.analysis-totals dt, .analysis-evidence, .analysis-verify { color: var(--muted); font-size: 12px; }
-.analysis-totals dd { margin: 3px 0 0; font-size: 13px; font-weight: 600; }
-#analysis-summary { overflow-wrap: anywhere; line-height: 1.65; }
-.analysis-recommendations { list-style: none; margin: 10px 0 0; padding: 0; }
-.analysis-recommendations li { border-top: 1px solid var(--line); padding: 11px 0; overflow-wrap: anywhere; }
-.analysis-recommendations li p { margin: 5px 0 0; line-height: 1.55; }
-.analysis-target { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.analysis-target button { margin-left: auto; }
-.analysis-host { overflow-wrap: anywhere; }
-.analysis-recommendations code { display: inline-block; margin-top: 6px; color: var(--pine); }
-#analysis-rules { display: block; width: 100%; margin: 8px 0; resize: vertical; }
-@media (max-width: 600px) {
-  .analysis-panel .panel-head { flex-wrap: wrap; }
-}

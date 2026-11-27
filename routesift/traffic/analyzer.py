@@ -260,8 +260,8 @@ def candidates(store, days, zone, include_reviewed, mode, query, page, size, sor
     return {"items": items, "total": count, "page": page, "size": size}
 
 
-def analysis_sample(store, days, zone, mode, limit):
-    """Summarize an interval and select distinct, unreviewed hostnames for the model."""
+def review_context(store, days, zone, mode, limit):
+    """Summarize traffic and select a bounded set of unreviewed hostnames."""
     windows = calendar_days(zone, days)
     matcher = ReviewMatcher(store.decisions())
     totals = Counter()
@@ -306,10 +306,10 @@ def analysis_sample(store, days, zone, mode, limit):
         eligible[host] = sum(rules.values())
     candidates = [
         {
-            "id": index, "host": host, "proxy_bytes": amount, "direct_bytes": direct[host],
+            "host": host, "proxy_bytes": amount, "direct_bytes": direct[host],
             "match_bytes": pending[host]["MATCH"], "active_days": len(active_days[host]),
         }
-        for index, (host, amount) in enumerate(top(eligible, limit), start=1)
+        for host, amount in top(eligible, limit)
     ]
     return {
         "start": windows[0][0], "end": windows[-1][0], "mode": mode,

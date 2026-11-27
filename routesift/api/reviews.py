@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from routesift.api import timezone
 from routesift.integrations.mihomo import MihomoAPI
 from routesift.rule_exporter import PROVIDERS, canonical_target
+from routesift.storage import BUCKET_SECONDS
 from routesift.traffic import analyzer
 
 router = APIRouter()
@@ -20,6 +21,25 @@ class Decision(BaseModel):
     match_value: str = Field(min_length=1, max_length=253)
     action: Literal["DIRECT", "KEEP_PROXY", "REJECT", "IGNORE", "MATCH_TARGET"]
     remark: str = Field(default="", max_length=500)
+
+
+@router.get("/api/review-context")
+def review_context(
+    request: Request,
+    days: Annotated[int, Query(ge=1, le=30)] = 7,
+    tz: Annotated[str, Query(max_length=100)] = "Asia/Shanghai",
+    mode: Literal["all", "match"] = "all",
+    limit: Annotated[int, Query(ge=1, le=100)] = 24,
+):
+    zone = timezone(tz)
+    context = analyzer.review_context(request.app.state.store, days, zone, mode, limit)
+    return {
+        **context, "timezone": zone.key, "byte_unit": "bytes",
+        "sampling": {
+            "bucket_seconds": BUCKET_SECONDS,
+            "note": "活跃连接快照的流量增量；无采样不代表无流量，首次观测可能包含此前累计用量。",
+        },
+    }
 
 
 @router.get("/api/candidates")

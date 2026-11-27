@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from routesift.traffic.analyzer import report
+from routesift.traffic.analyzer import report, review_context
 from routesift.storage import Store
 
 
@@ -18,15 +18,15 @@ class ReportTrendTests(unittest.TestCase):
         self.midnight = datetime(2026, 11, 27, tzinfo=self.zone)
         self.now = (self.midnight + timedelta(hours=23, minutes=59)).timestamp()
 
-    def add_traffic(self, when, route, upload, download, sampled=True):
+    def add_traffic(self, when, route, upload, download, sampled=True, host="example.com", rule="MATCH"):
         timestamp = int(when.timestamp())
         with self.store.connect() as db:
             db.execute(
                 """INSERT INTO traffic_stats (
                     bucket_ts, root_domain, host, process, rule_type, proxy_group,
                     route_type, up_bytes, down_bytes, conn_count
-                ) VALUES (?, 'example.com', 'example.com', '', 'MATCH', '', ?, ?, ?, 1)""",
-                (timestamp, route, upload, download),
+                ) VALUES (?, ?, ?, '', ?, '', ?, ?, ?, 1)""",
+                (timestamp, host, host, rule, route, upload, download),
             )
             if sampled:
                 db.execute("INSERT OR IGNORE INTO sample_buckets VALUES (?, 1)", (timestamp,))
@@ -57,6 +57,23 @@ class ReportTrendTests(unittest.TestCase):
         result = report(self.store, 1, self.zone, False, now=self.now)
         self.assertEqual(len(result["trend"]), 24)
         self.assertTrue(all(not point["traffic"] and point["sample_buckets"] == 0 for point in result["trend"]))
+
+    def test_review_context_limits_candidates_and_excludes_reviewed_hosts(self):
+        today = datetime.now(self.zone).replace(hour=0, minute=0, second=0, microsecond=0)
+        self.add_traffic(today, "PROXY", 10, 20)
+        self.add_traffic(today, "DIRECT", 5, 10)
+        self.add_traffic(today, "PROXY", 20, 40, host="example.org")
+        self.add_traffic(today, "PROXY", 1, 2, host="example.net", rule="DOMAIN")
+        self.store.save_decision("DOMAIN", "example.org", "DIRECT", "reviewed")
+        context = review_context(self.store, 1, self.zone, "all", 1)
+        self.assertEqual(context["totals"], {"PROXY": 93, "DIRECT": 15})
+        self.assertEqual(context["eligible_domains"], 2)
+        self.assertEqual(len(context["candidates"]), 1)
+        self.assertEqual(context["candidates"][0]["host"], "example.com")
+        self.assertEqual(context["candidates"][0]["direct_bytes"], 15)
+        context = review_context(self.store, 1, self.zone, "match", 24)
+        self.assertEqual(context["eligible_domains"], 1)
+        self.assertEqual(context["sampled_days"], 1)
 
     def test_longer_periods_remain_daily(self):
         self.add_traffic(self.midnight, "PROXY", 10, 20)

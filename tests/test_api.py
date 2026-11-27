@@ -115,12 +115,25 @@ class APIContractTests(unittest.IsolatedAsyncioTestCase):
         status, _ = await self.request("/api/shadowrocket/connections", "POST", headers={"x-auditor-request": "1"})
         self.assertEqual(status, 415)
 
-    async def test_ai_route_delegates_without_network_access(self):
-        with patch("routesift.api.analysis.deepseek.analyze", return_value={"status": "empty"}) as analyze:
-            status, body = await self.request("/api/ai/analysis", "POST", {}, {"x-auditor-request": "1"})
-            self.assertEqual(status, 200)
-            self.assertEqual(json.loads(body)["status"], "empty")
-            analyze.assert_called_once()
+    async def test_review_context_is_read_only_and_includes_sampling_metadata(self):
+        status, body = await self.request("/api/review-context?days=7&tz=Asia%2FShanghai&mode=match&limit=10")
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["timezone"], "Asia/Shanghai")
+        self.assertEqual(result["byte_unit"], "bytes")
+        self.assertEqual(result["mode"], "match")
+        self.assertEqual(result["sampling"]["bucket_seconds"], 300)
+        self.assertEqual(result["candidates"], [])
+        for query in ["days=0", "days=31", "limit=0", "limit=101", "mode=invalid", "tz=Invalid/Timezone"]:
+            with self.subTest(query=query):
+                status, _ = await self.request("/api/review-context?" + query)
+                self.assertEqual(status, 422)
+
+    async def test_provider_specific_analysis_entrypoint_is_removed(self):
+        status, _ = await self.request("/api/ai/analysis", "POST", {}, {"x-auditor-request": "1"})
+        self.assertEqual(status, 404)
+        status, html = await self.request("/")
+        self.assertNotIn(b'run-analysis', html)
 
     async def test_write_requests_keep_origin_and_header_checks(self):
         for headers in [{}, {"x-auditor-request": "1", "origin": "https://other.example"}]:

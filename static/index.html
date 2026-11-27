@@ -170,24 +170,6 @@
     </section>
 
     <section id="review" class="view" aria-labelledby="page-title" hidden>
-      <article class="panel analysis-panel" aria-labelledby="ai-heading">
-        <div class="panel-head">
-          <div><h2 id="ai-heading">大模型分流分析</h2><p>按所选统计周期和代理类型汇总流量。点击后向 DeepSeek 发送最多 24 个待审核域名及汇总用量。</p></div>
-          <button type="button" class="btn primary" id="run-analysis">DeepSeek 一键分析</button>
-        </div>
-        <p id="analysis-status" class="helper" role="status" hidden></p>
-        <div id="analysis-result" hidden>
-          <dl class="analysis-totals" id="analysis-totals"></dl>
-          <p id="analysis-summary" hidden></p>
-          <ul id="analysis-recommendations" class="analysis-recommendations" hidden></ul>
-          <details id="analysis-config" hidden>
-            <summary>查看 Mihomo 规则示例</summary>
-            <p class="helper">已接入 RouteSift 规则集时，可逐条带入审核。手动配置时，将验证过的规则添加到现有 rules 列表里，放在会先命中它们的规则前。</p>
-            <textarea id="analysis-rules" class="mono" rows="5" readonly aria-label="生成的 Mihomo 规则"></textarea>
-            <button type="button" class="btn secondary" id="copy-analysis-rules">复制规则示例</button>
-          </details>
-        </div>
-      </article>
       <article class="panel table-panel">
         <div class="table-controls">
           <div class="segments" role="group" aria-label="筛选规则">

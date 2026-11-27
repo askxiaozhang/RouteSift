@@ -1,4 +1,3 @@
-import { initAnalysis, syncAnalysisScope } from "./analysis.js";
 import { api } from "./api.js";
 import { clearTrendPoint, initCharts } from "./charts.js";
 import { initDecisions } from "./decisions.js";
@@ -52,7 +51,6 @@ async function loadView() {
     } else if (view === "domains") {
       await loadDomainView(id);
     } else if (view === "review") {
-      syncAnalysisScope();
       const params = query($("#review-reviewed").checked);
       params.set("mode", state.mode);
       params.set("sort", $("#review-sort").value);
@@ -120,7 +118,6 @@ initReview(loadView);
 initRules();
 initCharts();
 initDomainView({ reload: loadView, updateLocation: updateViewLocation });
-initAnalysis();
 initPhoneLogs(loadView);
 followViewLocation();
 refreshStatus();
