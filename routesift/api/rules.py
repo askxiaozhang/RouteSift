@@ -7,7 +7,7 @@ from fastapi.responses import PlainTextResponse
 
 from routesift.config import HOST, MODULE_PATH, MODULE_TOKEN
 from routesift.integrations import shadowrocket
-from routesift.rule_exporter import OVERRIDE, PROVIDERS, render_provider
+from routesift.rule_exporter import CLASH_VERGE_MERGE, CLASH_VERGE_OVERRIDE, OVERRIDE, PROVIDERS, render_provider
 
 router = APIRouter()
 
@@ -36,8 +36,22 @@ def shadowrocket_module(request: Request, module_token: str = ""):
     )
 
 
+def _render_override(request: Request, template_path):
+    base_url = f"http://{HOST}:{request.url.port or 80}"
+    source = template_path.read_text(encoding="utf-8").replace("http://127.0.0.1:18765", base_url)
+    return PlainTextResponse(source)
+
+
 @router.get("/rules/flclash-override.js")
 def override_file(request: Request):
-    base_url = f"http://{HOST}:{request.url.port or 80}"
-    source = OVERRIDE.read_text(encoding="utf-8").replace("http://127.0.0.1:18765", base_url)
-    return PlainTextResponse(source)
+    return _render_override(request, OVERRIDE)
+
+
+@router.get("/rules/clash-verge-override.js")
+def clash_verge_override_file(request: Request):
+    return _render_override(request, CLASH_VERGE_OVERRIDE)
+
+
+@router.get("/rules/clash-verge-merge.yaml")
+def clash_verge_merge_file(request: Request):
+    return _render_override(request, CLASH_VERGE_MERGE)

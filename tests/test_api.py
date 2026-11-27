@@ -101,10 +101,20 @@ class APIContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 200)
         status, _ = await self.request("/api/shadowrocket/import-review", "POST", {"rules": rules}, headers)
         self.assertEqual(status, 200)
-        for url in ["/rules/routesift-ios.sgmodule", "/rules/my-direct.yaml", "/rules/flclash-override.js"]:
+        for url in [
+            "/rules/routesift-ios.sgmodule",
+            "/rules/my-direct.yaml",
+            "/rules/flclash-override.js",
+            "/rules/clash-verge-override.js",
+            "/rules/clash-verge-merge.yaml",
+        ]:
             status, content = await self.request(url)
             self.assertEqual(status, 200)
             self.assertTrue(content)
+            if url.endswith("clash-verge-override.js"):
+                self.assertIn(b"function main(config)", content)
+            if url.endswith("clash-verge-merge.yaml"):
+                self.assertIn(b"prepend-rules:", content)
         status, _ = await self.request("/rules/ios/invalid/routesift-ios.sgmodule")
         self.assertEqual(status, 404)
 

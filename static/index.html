@@ -233,7 +233,14 @@
 
     <section id="rules" class="view" aria-labelledby="page-title" hidden>
       <article class="panel integration">
-        <div class="panel-head"><div><h2>接入 FlClash</h2><p>当前配置启用覆写脚本后，保存规则会尝试立即同步到 FlClash。</p></div><a class="btn primary" href="/rules/flclash-override.js" download>下载覆写脚本</a></div>
+        <div class="panel-head">
+          <div><h2>接入桌面客户端</h2><p>当前配置启用覆写脚本后，保存规则会尝试立即同步到 FlClash / Clash Verge。</p></div>
+          <div class="integration-actions">
+            <a class="btn primary" href="/rules/flclash-override.js" download>下载 FlClash 脚本</a>
+            <a class="btn secondary" href="/rules/clash-verge-override.js" download>下载 Clash Verge 脚本</a>
+            <a class="btn secondary" href="/rules/clash-verge-merge.yaml" download>下载 Clash Verge Merge</a>
+          </div>
+        </div>
         <div class="provider-links">
           <a href="/rules/my-direct.yaml" target="_blank" rel="noopener">DIRECT</a>
           <a href="/rules/my-reject.yaml" target="_blank" rel="noopener">REJECT</a>

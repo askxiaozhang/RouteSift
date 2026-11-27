@@ -15,6 +15,8 @@ EXTRACT = tldextract.TLDExtract(
 DOMAIN_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 PROVIDERS = {"direct": "DIRECT", "reject": "REJECT", "keep-proxy": "KEEP_PROXY", "match-target": "MATCH_TARGET"}
 OVERRIDE = RESOURCES_DIR / "flclash-override.js"
+CLASH_VERGE_OVERRIDE = RESOURCES_DIR / "clash-verge-override.js"
+CLASH_VERGE_MERGE = RESOURCES_DIR / "clash-verge-merge.yaml"
 
 
 @lru_cache(maxsize=8192)

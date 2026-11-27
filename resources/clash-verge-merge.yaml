@@ -1,0 +1,42 @@
+# Clash Verge Merge 扩展配置（在「订阅 -> 新建 Merge」或「全局扩展配置」中使用）
+# 注意：纯 YAML 无法自动读取原配置最后一条 MATCH 的目标策略组；
+# 若需使用 MATCH_TARGET，请取消下一条注释并将 PROXY 替换为你的兜底策略组名。
+
+rule-providers:
+  traffic-auditor-reject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-reject.yaml
+    path: ./ruleset/traffic-auditor-reject.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-direct:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-direct.yaml
+    path: ./ruleset/traffic-auditor-direct.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-keep-proxy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-keep-proxy.yaml
+    path: ./ruleset/traffic-auditor-keep-proxy.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-match-target:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-match-target.yaml
+    path: ./ruleset/traffic-auditor-match-target.yaml
+    interval: 300
+    proxy: DIRECT
+
+prepend-rules:
+  # - 'RULE-SET,traffic-auditor-match-target,PROXY'
+  - 'AND,((RULE-SET,traffic-auditor-reject),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),REJECT'
+  - 'AND,((RULE-SET,traffic-auditor-direct),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),DIRECT'
