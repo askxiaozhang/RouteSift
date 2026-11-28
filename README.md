@@ -89,6 +89,16 @@ Enable your client's loopback controller, run the commands above, then open the 
 
 多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](resources/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
 
+### 接入 Clash Verge Rev
+
+在 RouteSift「规则管理」下载 Clash Verge 脚本，将内容粘贴到当前订阅的「扩展脚本」或「全局扩展脚本」，保存后重新应用订阅。脚本会读取订阅最后一条 `MATCH` 的目标策略组，为 `MATCH_TARGET` 生成对应规则。
+
+Clash Verge Rev v1.7 及以上也可用 YAML 接入。
+
+1. 下载「Clash Verge YAML」，将 `rule-providers` 合并到目标订阅的「扩展配置」，保留已有提供者。
+2. 右键同一订阅，选择「编辑规则」，把模板末尾的 `REJECT` 和 `DIRECT` 规则按顺序逐条加到「前置（Prepend）」。若使用 `MATCH_TARGET`，将对应规则放在最前，并把 `PROXY` 替换为订阅最后一条 `MATCH` 的目标策略组。
+3. 保存并重新应用订阅。在「规则」模式下建立新连接，检查是否命中 RouteSift 的规则。 [Clash Verge Rev 扩展配置说明](https://github.com/clash-verge-rev/clash-verge-rev.github.io/blob/main/docs/guide/extend.md)
+
 ## 手机和电脑共享分流规则
 
 1. 启用局域网访问。运行 `openssl rand -hex 32` 生成令牌，把结果填入 `.env` 的 `SHADOWROCKET_MODULE_TOKEN`，然后重启 RouteSift。
@@ -124,7 +134,7 @@ RouteSift 读取手机诊断流里的分流记录，按域名和时间统计次�
 
 ## 通过 MCP 接入 agent
 
-RouteSift 提供本地 `stdio` MCP Server。harness 负责模型、对话和解读，RouteSift 通过已有 HTTP 接口提供流量证据。工具只读取数据，规则修改仍在看板完成；项目无需配置模型 API 或密钥。使用 DeepSeek 的 harness 或其他支持本地 MCP 的客户端均可接入，具体配置字段以客户端为准。
+RouteSift 提供本地 `stdio` MCP Server。harness 负责模型、对话和解读。RouteSift 通过本机 HTTP 接口提供四个查询工具和两个修改审核规则的工具。`save_decision` 可覆盖已有决定及备注，`undo_decision` 会删除已有决定。仅在明确要求应用、修改或撤销规则时使用这两个工具。模型 API 和密钥由支持本地 MCP 的客户端配置。
 
 ### 安装与连接
 
@@ -258,7 +268,7 @@ RouteSift/
 ├── routesift/                        # Python 应用包
 │   ├── __init__.py
 │   ├── __main__.py                   # python -m routesift 启动入口
-│   ├── mcp_server.py                 # 通过本机 HTTP 查询数据的只读 stdio MCP Server
+│   ├── mcp_server.py                 # 通过本机 HTTP 查询流量和修改审核规则的 stdio MCP Server
 │   ├── app.py                        # 组装 FastAPI、挂载静态资源、启停采集任务
 │   ├── config.py                     # 加载配置、校验地址、统一项目根目录路径
 │   ├── security.py                   # 本机/LAN 访问控制及写请求来源校验
@@ -316,7 +326,7 @@ RouteSift/
 ├── tests/
 │   ├── test_analyzer.py              # 聚合总量、时间边界和统计粒度回归测试
 │   ├── test_api.py                   # 接口、静态资源、审核流程和访问控制测试
-│   └── test_mcp.py                   # stdio 协议、工具参数、只读查询和错误处理测试
+│   └── test_mcp.py                   # stdio 协议、工具参数、审核读写和错误处理测试
 ├── docs/
 │   └── images/
 │       └── domain-detail.png         # README 使用的合成流量截图
@@ -331,7 +341,7 @@ RouteSift/
 - **启动与配置**：`__main__.py` 启动服务，`config.py` 从项目根目录加载 `.env` 并确定数据库、静态资源和模板路径。`app.py` 组装路由、访问控制与后台采集任务。
 - **采集与分析**：`traffic/collector.py` 把 Mihomo 连接快照转换为流量增量，通过 `storage.py` 落库。`analyzer.py` 和 `domain_insights.py` 读取数据，供总览与域名详情接口使用。
 - **审核与规则**：`api/reviews.py` 保存审核结论；`rule_exporter.py` 和 Shadowrocket 适配模块据此生成电脑、手机使用的规则。`api/rules.py` 提供下载入口。
-- **Agent 接入**：`mcp_server.py` 将本机 HTTP 查询封装为四个 MCP 工具；harness 负责调用模型并生成解读。
+- **Agent 接入**　`mcp_server.py` 封装本机 HTTP 查询和审核写入。harness 负责调用模型并生成解读。
 - **页面交互**：`static/js/app.js` 负责初始化和页面调度，各页面通过 `import` / `export` 声明依赖。`state.js` 保存共享状态，`decisions.js` 提供共用审核弹窗，`api.js` 统一发送请求。
 
 ### 本地验证

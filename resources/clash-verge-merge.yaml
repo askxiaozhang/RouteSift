@@ -1,6 +1,6 @@
-# Clash Verge Merge 扩展配置（在「订阅 -> 新建 Merge」或「全局扩展配置」中使用）
-# 注意：纯 YAML 无法自动读取原配置最后一条 MATCH 的目标策略组；
-# 若需使用 MATCH_TARGET，请取消下一条注释并将 PROXY 替换为你的兜底策略组名。
+# Clash Verge Rev v1.7+ 订阅扩展配置
+# 1. 将 rule-providers 合并到目标订阅的「扩展配置」，保留已有提供者。
+# 2. 右键同一个订阅，打开「编辑规则」，将文件末尾的规则逐条加入「前置（Prepend）」。
 
 rule-providers:
   traffic-auditor-reject:
@@ -36,7 +36,8 @@ rule-providers:
     interval: 300
     proxy: DIRECT
 
-prepend-rules:
-  # - 'RULE-SET,traffic-auditor-match-target,PROXY'
-  - 'AND,((RULE-SET,traffic-auditor-reject),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),REJECT'
-  - 'AND,((RULE-SET,traffic-auditor-direct),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),DIRECT'
+# 前置规则按以下顺序加入，粘贴时去掉注释符号。
+# 使用 MATCH_TARGET 时，加上第一条并将 PROXY 替换为该订阅最后一条 MATCH 的目标策略组。
+# RULE-SET,traffic-auditor-match-target,PROXY
+# AND,((RULE-SET,traffic-auditor-reject),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),REJECT
+# AND,((RULE-SET,traffic-auditor-direct),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),DIRECT

@@ -114,7 +114,15 @@ class APIContractTests(unittest.IsolatedAsyncioTestCase):
             if url.endswith("clash-verge-override.js"):
                 self.assertIn(b"function main(config)", content)
             if url.endswith("clash-verge-merge.yaml"):
-                self.assertIn(b"prepend-rules:", content)
+                self.assertNotIn(b"prepend-rules:", content)
+                self.assertIn(b"\nrule-providers:\n", content)
+                self.assertIn(b"\n# RULE-SET,traffic-auditor-match-target,PROXY", content)
+                for provider, action in ((b"reject", b"REJECT"), (b"direct", b"DIRECT")):
+                    self.assertIn(
+                        b"\n# AND,((RULE-SET,traffic-auditor-" + provider
+                        + b"),(NOT,((RULE-SET,traffic-auditor-keep-proxy))))," + action,
+                        content,
+                    )
         status, _ = await self.request("/rules/ios/invalid/routesift-ios.sgmodule")
         self.assertEqual(status, 404)
 

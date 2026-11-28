@@ -50,7 +50,6 @@ def create_server(url="http://127.0.0.1:18765"):
         ),
     )
     readonly = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
-    writable = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
     destructive = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
 
     def request(method, path, params=None, body=None):
@@ -133,14 +132,14 @@ def create_server(url="http://127.0.0.1:18765"):
         items = get("/api/decisions")
         return {"items": items[offset:offset + limit], "total": len(items), "offset": offset, "limit": limit}
 
-    @server.tool(annotations=writable)
+    @server.tool(annotations=destructive)
     def save_decision(
         match_type: Literal["DOMAIN", "DOMAIN-SUFFIX", "PROCESS-NAME", "IP-CIDR"],
         match_value: Annotated[str, Field(min_length=1, max_length=253)],
         action: Literal["DIRECT", "KEEP_PROXY", "REJECT", "IGNORE", "MATCH_TARGET"],
         remark: Annotated[str, Field(max_length=500)] = "",
     ) -> dict[str, Any]:
-        """Save or update a review decision and refresh loaded Mihomo rule providers."""
+        """Save a review decision, replacing any existing action and remark for the target, and refresh loaded Mihomo rule providers."""
         return request(
             "PUT",
             "/api/decisions",
