@@ -4,7 +4,7 @@
 
 Local traffic analytics and shared routing rules for FlClash and Shadowrocket. Inspect per-domain bandwidth from Mihomo, monitor iOS connection logs, and reuse reviewed routing decisions across devices.
 
-![RouteSift 的域名详情，含分时流量、策略组和规则命中情况](assets/domain-detail.png)
+![RouteSift 的域名详情，含分时流量、策略组和规则命中情况](docs/images/domain-detail.png)
 
 *截图使用合成流量。*
 
@@ -14,7 +14,7 @@ Local traffic analytics and shared routing rules for FlClash and Shadowrocket. I
 | --- | --- |
 | 某个域名今天什么时候开始大量走代理？ | 打开「域名详情」，选择精确域名或含子域名，按 5 分钟、1 小时或 1 天查看上传、下载、代理和直连流量。 |
 | 这段流量为什么走了这条线路？ | 在「实际分流」看命中规则、策略组和节点。流量概览还提供域名和进程排行、MATCH 兜底榜、流量频次四象限和单日突发。 |
-| 哪些目标值得优先审核？ | 审核队列支持按代理流量大小或最近活动排序，也可以用 DeepSeek 生成分流建议和规则示例。 |
+| 哪些目标值得优先审核？ | 审核队列支持按代理流量大小或最近活动排序，也可以通过 MCP 让 agent 查询流量证据并给出建议。 |
 | 看到一个域名想设为直连，怎么加规则？ | 在「域名详情」「审核队列」或「手机日志」保存规则，RouteSift 会刷新已接入的 FlClash。 |
 | 手机和电脑可以共用规则吗？ | 在「规则管理」复制 Shadowrocket 远程模块地址，添加一次后即可更新共享直连和拦截规则。 |
 | 怎样核对 iPhone 上哪些域名走了代理？ | 打开「手机日志」查看 Shadowrocket 的实时诊断记录，也可导入代理日志文件。 |
@@ -32,7 +32,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 cp -n .env.example .env
 chmod 600 .env
-.venv/bin/python server.py
+.venv/bin/python -m routesift
 ```
 
 打开 [本机看板](http://127.0.0.1:18765)。如果控制器设了密钥，在启动前把相同的值填进 `.env`。首次连接成功后，看板会显示「采集中」。可以从「流量概览」点击现有目标，也可在「域名详情」输入具体域名。
@@ -61,7 +61,7 @@ Enable your client's loopback controller, run the commands above, then open the 
 
 在「域名详情」或「审核队列」选择目标，查看流量走势与命中规则。队列可按代理流量大小或最近活动排序，最近时间取有代理流量的 5 分钟窗口起点。规则支持精确域名、域名后缀、进程名和 IP / CIDR。
 
-「带入审核」会预填 DeepSeek 的建议。点「保存审核」后，RouteSift 的规则集立即更新。比如保存 `static.example.com` 为精确域名直连，在 FlClash 拉取规则集后，效果等同于 `DOMAIN,static.example.com,DIRECT`。已审核目标默认从候选和代理分析中折叠，可通过「显示已审核」查看。
+点「保存审核」后，RouteSift 的规则集立即更新。比如保存 `static.example.com` 为精确域名直连，在 FlClash 拉取规则集后，效果等同于 `DOMAIN,static.example.com,DIRECT`。已审核目标默认从候选和代理分析中折叠，可通过「显示已审核」查看。
 
 ### 首次挂载覆写脚本
 
@@ -87,7 +87,17 @@ Enable your client's loopback controller, run the commands above, then open the 
 | `REJECT` | 命中时拦截，同步 `traffic-auditor-reject` |
 | `IGNORE` | 只影响审核筛选 |
 
-多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](deploy/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
+多个审核目标重叠时，MATCH_TARGET 优先，其次保留原分流、拦截、直连。每个配置的 MATCH_TARGET 使用该配置自己的兜底策略。其他 Mihomo 客户端可参考 [覆写脚本](resources/flclash-override.js) 配置相同的 HTTP rule providers 和规则顺序。规则集使用 [Mihomo classical YAML 格式](https://wiki.metacubex.one/en/config/rule-providers/)。
+
+### 接入 Clash Verge Rev
+
+在 RouteSift「规则管理」下载 Clash Verge 脚本，将内容粘贴到当前订阅的「扩展脚本」或「全局扩展脚本」，保存后重新应用订阅。脚本会读取订阅最后一条 `MATCH` 的目标策略组，为 `MATCH_TARGET` 生成对应规则。
+
+Clash Verge Rev v1.7 及以上也可用 YAML 接入。
+
+1. 下载「Clash Verge YAML」，将 `rule-providers` 合并到目标订阅的「扩展配置」，保留已有提供者。
+2. 右键同一订阅，选择「编辑规则」，把模板末尾的 `REJECT` 和 `DIRECT` 规则按顺序逐条加到「前置（Prepend）」。若使用 `MATCH_TARGET`，将对应规则放在最前，并把 `PROXY` 替换为订阅最后一条 `MATCH` 的目标策略组。
+3. 保存并重新应用订阅。在「规则」模式下建立新连接，检查是否命中 RouteSift 的规则。 [Clash Verge Rev 扩展配置说明](https://github.com/clash-verge-rev/clash-verge-rev.github.io/blob/main/docs/guide/extend.md)
 
 ## 手机和电脑共享分流规则
 
@@ -122,13 +132,75 @@ RouteSift 读取手机诊断流里的分流记录，按域名和时间统计次�
 
 单个文件最多 32 MiB、10 万条记录。日志导出提供连接记录，页面按次数统计。手机记录保留目标域名或 IP、时间、分流去向和去重所需的记录编号。重复导入会跳过已有记录，完整 URL 与查询参数留在原日志文件中。
 
-## DeepSeek 一键分析
+## 通过 MCP 接入 agent
 
-在本机 `.env` 配置 `DEEPSEEK_API_KEY`，或通过 `DEEPSEEK_ENV_FILE` 引用另一个含 DeepSeek 配置的 `.env`，然后重启。默认使用 `deepseek-flash` 和 `https://api.deepseek.com`，可通过 `DEEPSEEK_MODEL` 和 `DEEPSEEK_BASE_URL` 修改。 [DeepSeek JSON 输出文档](https://api-docs.deepseek.com/guides/json_mode/)
+RouteSift 提供本地 `stdio` MCP Server。harness 负责模型、对话和解读。RouteSift 通过本机 HTTP 接口提供四个查询工具和两个修改审核规则的工具。`save_decision` 可覆盖已有决定及备注，`undo_decision` 会删除已有决定。仅在明确要求应用、修改或撤销规则时使用这两个工具。模型 API 和密钥由支持本地 MCP 的客户端配置。
 
-在「审核队列」选择统计周期及「全部代理」或「MATCH 兜底」，点击「DeepSeek 一键分析」。RouteSift 先在本机统计，再按代理用量选出最多 24 个待审核域名发给模型。发送内容为完整域名、汇总流量与活跃天数。IP、进程名、节点名、连接明细和审核备注留在本机。
+### 安装与连接
 
-结果包含流量汇总、建议理由与试行验证方法。可以复制生成的 Mihomo 精确域名规则，也可把单条建议带入审核，确认后按上面的步骤同步 FlClash。DeepSeek 不可用时仍可看到本地流量汇总。
+先按快速开始启动 RouteSift。普通看板只需 `requirements.txt`；需要 MCP 时，在宿主机项目目录安装可选依赖：
+
+```sh
+uv pip install --python .venv/bin/python -r requirements-mcp.txt
+```
+
+也可以使用 `.venv/bin/python -m pip install -r requirements-mcp.txt`。适配层使用 [官方 MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)，作为独立进程由 harness 启动，不会启动第二个采集器或直接打开数据库。
+
+下面是常见的 `mcpServers` 配置格式。把两个绝对路径替换为实际项目路径；使用绝对脚本路径可避免依赖 harness 的工作目录。
+
+```json
+{
+  "mcpServers": {
+    "routesift": {
+      "command": "/absolute/path/to/RouteSift/.venv/bin/python",
+      "args": [
+        "/absolute/path/to/RouteSift/routesift/mcp_server.py",
+        "--url",
+        "http://127.0.0.1:18765"
+      ]
+    }
+  }
+}
+```
+
+`--url` 指向已运行的 RouteSift 本机看板，只接受回环 HTTP 地址。自定义看板端口时相应修改它。RouteSift 使用 Docker 部署时，MCP 进程仍可在宿主机运行，通过映射的本机端口查询。MCP 进程的标准输入/输出用于协议通信，通常无需手动常驻启动。可在项目根目录运行 `.venv/bin/python -m routesift.mcp_server --help` 查看入口说明。
+
+### 可用工具
+
+| 工具 | 参数与用途 |
+| --- | --- |
+| `get_review_context` | `days`、`tz`、`mode`、`limit`：获取流量总量、采样覆盖和优先审核的域名。默认近 7 天、`Asia/Shanghai`、全部代理、最多 24 项。 |
+| `list_review_candidates` | 按域名、IP 或进程搜索候选，可按流量或最近活动排序，支持分页及显示已审核目标。 |
+| `get_domain_detail` | 指定 `host`、`start`、`end`，查看精确域名或含子域名的时间序列、实际分流和规则归因。支持 5 分钟、小时、日粒度。 |
+| `list_decisions` | 按 `offset`、`limit` 分页读取已保存的审核结论与备注。 |
+| `save_decision` | 保存或更新指定目标（`DOMAIN`、`DOMAIN-SUFFIX`、`PROCESS-NAME`、`IP-CIDR`）的审核结论，并触发刷新已加载的 Mihomo 规则集。 |
+| `undo_decision` | 按 `decision_id` 撤销已保存的审核记录，并触发刷新已加载的 Mihomo 规则集。 |
+
+审核上下文接口为 `GET /api/review-context`，复用本地统计逻辑，周期限制为 1–30 天，候选上限为 100。上下文优先列出规范域名，IP 目标可通过候选工具查询。字节数据标明单位和时区；无采样不代表无流量，首次观测也可能包含此前累计用量。
+
+例如，在 harness 中提出：
+
+> 分析近 7 天的代理消耗，重点检查 MATCH 兜底目标。先读取已有审核结论，再查看高流量域名的实际分流，给出值得验证的建议、依据和验证方法。
+
+查询结果会进入所用 harness 的上下文，由其按当前模型配置处理。RouteSift 自身不调用模型；请在 harness 中管理模型凭据及数据使用设置。
+
+### 安装配套 Skill
+
+仓库提供 [`skills/routesift-review`](skills/routesift-review/SKILL.md)，封装流量解读、已有审核检查、域名排查和建议验证流程。按 [Skills CLI](https://github.com/vercel-labs/skills) 的安装格式，在希望使用 skill 的项目目录执行：
+
+```sh
+npx skills add /absolute/path/to/RouteSift --skill routesift-review
+```
+
+安装到指定 agent 可加 `--agent codex` 或 `--agent claude-code`；跨项目使用可加 `--global`。安装时可交互选择目标 agent。若当前目录就是 RouteSift 仓库，也可以用 `npx skills add . --skill routesift-review`。
+
+将此目录提交并推送到自己的 GitHub 仓库后，可改用远程来源（替换仓库所有者）：
+
+```sh
+npx skills add <your-github-owner>/RouteSift --skill routesift-review
+```
+
+Skill 优先使用已连接的 MCP；未配置 MCP 时可通过附带的 Python 3 标准库脚本只读查询本机 HTTP 服务。安装 skill 不会自动注册 MCP，RouteSift 看板服务仍需运行。配置方法见 [Skill 接入说明](skills/routesift-review/references/setup.md)。
 
 ## 数据和采样口径
 
@@ -154,20 +226,9 @@ docker compose up -d --build
 - **局域网访问**　在 `.env` 设置 `AUDITOR_LAN_IP` 和 `AUDITOR_LAN_PASSWORD`。默认宿主机的 `127.0.0.1:18765` 免密，`<AUDITOR_LAN_IP>:18765` 使用 `routesift` 账号登录。Compose 将它们映射到容器内两个端口。若自定义 `AUDITOR_PORT`，请确保它与容器内的 `AUDITOR_LAN_PORT`（默认 `18766`）不同。Mac 换网后，更新 `.env` 的局域网地址并运行 `docker compose up -d`。
 - **数据目录**　Compose 将 `./data` 挂载到 `/app/data`，重建容器后仍使用同一个 SQLite 数据库。若自定义 `AUDITOR_DB`，可将数据库路径设在此目录下。
 
-若 DeepSeek 凭据存放在宿主机的另一个 `.env`，可创建本地 `docker-compose.override.yml`，以只读方式挂载到容器。替换下面的宿主机文件路径。
-
-```yaml
-services:
-  routesift:
-    environment:
-      DEEPSEEK_ENV_FILE: /run/secrets/deepseek.env
-    volumes:
-      - /absolute/path/to/deepseek.env:/run/secrets/deepseek.env:ro
-```
-
 ### 系统服务
 
-**macOS**　将 [launchd 模板](deploy/com.flclash.auditor.plist) 中的 `WORKSPACE_PATH` 替换为项目绝对路径。创建项目下的 `data/`，将修改后的模板保存到 `~/Library/LaunchAgents/com.flclash.auditor.plist`。退出前台进程后加载。
+**macOS**　将 [launchd 模板](deploy/macos/com.flclash.auditor.plist) 中的 `WORKSPACE_PATH` 替换为项目绝对路径。创建项目下的 `data/`，将修改后的模板保存到 `~/Library/LaunchAgents/com.flclash.auditor.plist`。退出前台进程后加载。
 
 ```sh
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.flclash.auditor.plist"
@@ -175,12 +236,121 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.flclash.audit
 
 停止时运行 `launchctl bootout "gui/$(id -u)/com.flclash.auditor"`。
 
-**Linux**　按实际路径修改 [systemd 用户服务模板](deploy/flclash-auditor.service) 的 `WorkingDirectory` 与 `ExecStart`，保存为 `~/.config/systemd/user/flclash-auditor.service`，退出前台进程后运行下列命令。
+已有常驻服务升级目录结构后，请使用新模板更新已安装的配置。macOS 先 `bootout` 卸载旧任务，再用 `bootstrap` 加载新配置；`kickstart` 只重启已加载的配置。
+
+**Linux**　按实际路径修改 [systemd 用户服务模板](deploy/linux/flclash-auditor.service) 的 `WorkingDirectory` 与 `ExecStart`，保存为 `~/.config/systemd/user/flclash-auditor.service`，退出前台进程后运行下列命令。
 
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now flclash-auditor.service
 ```
+
+已有 Linux 服务更新模板并执行 `daemon-reload` 后，运行 `systemctl --user restart flclash-auditor.service` 应用新的启动参数。
+
+## 项目结构
+
+### 项目文件树
+
+源码、测试、部署模板和文档按职责组织。下方也列出了本地运行时使用的配置与数据目录，它们不提交到 Git。
+
+```text
+RouteSift/
+├── README.md                         # 使用、配置、部署与开发说明
+├── LICENSE                           # MIT 许可证
+├── requirements.txt                  # Python 运行依赖
+├── requirements-mcp.txt              # MCP 可选依赖（包含基础运行依赖）
+├── Dockerfile                        # 构建容器镜像及配置健康检查
+├── docker-compose.yml                # 容器启动、端口与数据挂载
+├── .env.example                      # 环境变量示例，不含真实凭据
+├── .gitignore                        # Git 忽略规则
+├── .dockerignore                     # 容器构建上下文忽略规则
+│
+├── routesift/                        # Python 应用包
+│   ├── __init__.py
+│   ├── __main__.py                   # python -m routesift 启动入口
+│   ├── mcp_server.py                 # 通过本机 HTTP 查询流量和修改审核规则的 stdio MCP Server
+│   ├── app.py                        # 组装 FastAPI、挂载静态资源、启停采集任务
+│   ├── config.py                     # 加载配置、校验地址、统一项目根目录路径
+│   ├── security.py                   # 本机/LAN 访问控制及写请求来源校验
+│   ├── storage.py                    # SQLite 初始化、采集数据与审核记录读写
+│   ├── rule_exporter.py              # 目标规范化、审核匹配、Mihomo 规则集生成
+│   ├── api/                          # HTTP 参数校验与接口响应
+│   │   ├── __init__.py               # 共用请求辅助函数，如时区校验
+│   │   ├── traffic.py                # 采集状态、流量报告、域名搜索与详情
+│   │   ├── reviews.py                # 审核上下文、队列、决策保存/撤销和规则刷新
+│   │   ├── rules.py                  # 规则集、FlClash 脚本与 iOS 模块下载
+│   │   └── shadowrocket.py           # 手机规则配置、日志上传与查询接口
+│   ├── traffic/                      # 桌面流量采集与统计
+│   │   ├── __init__.py
+│   │   ├── collector.py              # WebSocket 快照、连接增量与批量落库
+│   │   ├── analyzer.py               # 小时/日聚合、排行、审核候选及突发分析
+│   │   └── domain_insights.py        # 单域名时间序列、分流策略与规则归因
+│   └── integrations/                 # 外部服务、客户端和日志格式适配
+│       ├── __init__.py
+│       ├── mihomo.py                 # Mihomo 控制器 HTTP 调用
+│       ├── shadowrocket.py           # 手机规则解析、合并与模块生成
+│       ├── shadowrocket_live.py      # 手机诊断日志流解析与实时采集
+│       └── shadowrocket_logs.py      # 手机 SQLite 日志导入、去重与连接统计
+│
+├── static/                           # 无需构建的浏览器页面与资源
+│   ├── index.html                    # 页面结构和 ES Modules 入口引用
+│   ├── css/
+│   │   └── styles.css                # 页面样式和响应式布局
+│   └── js/
+│       ├── app.js                    # 初始化、导航、页面请求调度和采集状态
+│       ├── api.js                    # HTTP 请求、写请求标记与错误处理
+│       ├── ui.js                     # DOM、表格、数值格式化与消息提示
+│       ├── state.js                  # 页面共享状态
+│       ├── charts.js                 # 总览图表、小时/日流量提示和键盘交互
+│       ├── overview.js               # 流量概览指标、排行和统计结果渲染
+│       ├── review.js                 # 审核队列、排序、搜索与分页
+│       ├── decisions.js              # 共用审核弹窗、保存、撤销与恢复
+│       ├── rules.js                  # 审核记录管理和 Shadowrocket 规则编辑
+│       ├── domains.js                # 域名搜索、日期筛选、趋势图与审核入口
+│       └── phone-logs.js             # 手机日志导入、来源筛选与连接趋势展示
+│
+├── skills/                           # 可通过 npx skills add 安装的 agent 技能
+│   └── routesift-review/
+│       ├── SKILL.md                  # 流量审核流程、数据口径与工具使用指引
+│       ├── scripts/
+│       │   └── query.py              # 无 MCP 时使用的独立只读 HTTP 查询脚本
+│       └── references/
+│           └── setup.md              # 服务前提和可选 MCP 配置说明
+├── resources/
+│   └── flclash-override.js            # 运行时读取的 FlClash 覆写脚本模板
+├── deploy/
+│   ├── macos/
+│   │   └── com.flclash.auditor.plist  # launchd 用户服务模板
+│   └── linux/
+│       └── flclash-auditor.service   # systemd 用户服务模板
+├── tests/
+│   ├── test_analyzer.py              # 聚合总量、时间边界和统计粒度回归测试
+│   ├── test_api.py                   # 接口、静态资源、审核流程和访问控制测试
+│   └── test_mcp.py                   # stdio 协议、工具参数、审核读写和错误处理测试
+├── docs/
+│   └── images/
+│       └── domain-detail.png         # README 使用的合成流量截图
+│
+├── data/                             # 本地数据库、锁文件和运行日志，不提交
+├── .env                              # 本机配置与凭据，不提交
+└── .venv/                            # 本机 Python 虚拟环境，不提交
+```
+
+### 模块协作
+
+- **启动与配置**：`__main__.py` 启动服务，`config.py` 从项目根目录加载 `.env` 并确定数据库、静态资源和模板路径。`app.py` 组装路由、访问控制与后台采集任务。
+- **采集与分析**：`traffic/collector.py` 把 Mihomo 连接快照转换为流量增量，通过 `storage.py` 落库。`analyzer.py` 和 `domain_insights.py` 读取数据，供总览与域名详情接口使用。
+- **审核与规则**：`api/reviews.py` 保存审核结论；`rule_exporter.py` 和 Shadowrocket 适配模块据此生成电脑、手机使用的规则。`api/rules.py` 提供下载入口。
+- **Agent 接入**　`mcp_server.py` 封装本机 HTTP 查询和审核写入。harness 负责调用模型并生成解读。
+- **页面交互**：`static/js/app.js` 负责初始化和页面调度，各页面通过 `import` / `export` 声明依赖。`state.js` 保存共享状态，`decisions.js` 提供共用审核弹窗，`api.js` 统一发送请求。
+
+### 本地验证
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+安装 `requirements-mcp.txt` 后，上述命令会同时执行 MCP 协议测试；只安装基础依赖时，MCP 专项测试会跳过。
 
 ## 排查与开发
 
@@ -192,7 +362,7 @@ systemctl --user enable --now flclash-auditor.service
 - **手机模块无法更新**　确认 RouteSift 正在运行，iPhone 能访问 Mac 的局域网地址，且订阅地址与「接入 Shadowrocket」里显示的一致。
 - **手机实时日志没连接**　保持 Shadowrocket 已连接，检查诊断日志和「允许访问」是否开启。手机换网后核对诊断页面显示的地址。
 
-[采集](collector.py)负责快照与增量，[存储](storage.py)负责 SQLite 和审核记录，[分析](analyzer.py)与[域名详情](domain_insights.py)负责聚合，[服务](server.py)托管[看板](static/index.html)和[规则导出](rule_exporter.py)。
+[采集](routesift/traffic/collector.py)负责快照与增量，[存储](routesift/storage.py)负责 SQLite 和审核记录，[分析](routesift/traffic/analyzer.py)与[域名详情](routesift/traffic/domain_insights.py)负责聚合，[服务](routesift/app.py)托管[看板](static/index.html)和[规则导出](routesift/rule_exporter.py)。
 
 ## License
 

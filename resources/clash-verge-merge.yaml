@@ -1,0 +1,43 @@
+# Clash Verge Rev v1.7+ 订阅扩展配置
+# 1. 将 rule-providers 合并到目标订阅的「扩展配置」，保留已有提供者。
+# 2. 右键同一个订阅，打开「编辑规则」，将文件末尾的规则逐条加入「前置（Prepend）」。
+
+rule-providers:
+  traffic-auditor-reject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-reject.yaml
+    path: ./ruleset/traffic-auditor-reject.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-direct:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-direct.yaml
+    path: ./ruleset/traffic-auditor-direct.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-keep-proxy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-keep-proxy.yaml
+    path: ./ruleset/traffic-auditor-keep-proxy.yaml
+    interval: 300
+    proxy: DIRECT
+  traffic-auditor-match-target:
+    type: http
+    behavior: classical
+    format: yaml
+    url: http://127.0.0.1:18765/rules/my-match-target.yaml
+    path: ./ruleset/traffic-auditor-match-target.yaml
+    interval: 300
+    proxy: DIRECT
+
+# 前置规则按以下顺序加入，粘贴时去掉注释符号。
+# 使用 MATCH_TARGET 时，加上第一条并将 PROXY 替换为该订阅最后一条 MATCH 的目标策略组。
+# RULE-SET,traffic-auditor-match-target,PROXY
+# AND,((RULE-SET,traffic-auditor-reject),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),REJECT
+# AND,((RULE-SET,traffic-auditor-direct),(NOT,((RULE-SET,traffic-auditor-keep-proxy)))),DIRECT

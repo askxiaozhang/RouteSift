@@ -4,16 +4,19 @@ import ipaddress
 import json
 import re
 from functools import lru_cache
-from pathlib import Path
 
 import tldextract
+
+from routesift.config import RESOURCES_DIR
 
 EXTRACT = tldextract.TLDExtract(
     suffix_list_urls=(), cache_dir=None, include_psl_private_domains=True
 )
 DOMAIN_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 PROVIDERS = {"direct": "DIRECT", "reject": "REJECT", "keep-proxy": "KEEP_PROXY", "match-target": "MATCH_TARGET"}
-OVERRIDE = Path(__file__).parent / "deploy" / "flclash-override.js"
+OVERRIDE = RESOURCES_DIR / "flclash-override.js"
+CLASH_VERGE_OVERRIDE = RESOURCES_DIR / "clash-verge-override.js"
+CLASH_VERGE_MERGE = RESOURCES_DIR / "clash-verge-merge.yaml"
 
 
 @lru_cache(maxsize=8192)

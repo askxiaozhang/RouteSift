@@ -5,11 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>RouteSift · 流量审计</title>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script defer src="/static/domains.js"></script>
-  <script defer src="/static/analysis.js"></script>
-  <script defer src="/static/phone-logs.js"></script>
-  <script defer src="/static/app.js"></script>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script type="module" src="/static/js/app.js"></script>
 </head>
 <body>
   <aside class="rail">
@@ -38,13 +35,13 @@
         <p id="page-description">查看本机采集的代理用量、流量归因和突发变化。</p>
       </div>
       <div id="range-tools" class="tools">
-        <label for="days">统计周期</label>
-        <select id="days">
-          <option value="1">今天</option>
-          <option value="7" selected>近 7 天</option>
-          <option value="14">近 14 天</option>
-          <option value="30">近 30 天</option>
-        </select>
+        <span id="days-label">统计周期</span>
+        <div id="days" class="period-switch" role="radiogroup" aria-labelledby="days-label">
+          <label><input type="radio" name="days" value="1"><span>今天</span></label>
+          <label><input type="radio" name="days" value="7" checked><span>近 7 天</span></label>
+          <label><input type="radio" name="days" value="14"><span>近 14 天</span></label>
+          <label><input type="radio" name="days" value="30"><span>近 30 天</span></label>
+        </div>
         <button type="button" class="btn secondary" id="refresh">刷新</button>
       </div>
     </header>
@@ -62,11 +59,14 @@
       <div class="trend-grid">
         <article class="panel">
           <div class="panel-head">
-            <div><h2>每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
+            <div><h2 id="trend-title">每日流量</h2><p id="trend-range">按本地日期汇总</p></div>
             <div class="legend" aria-label="图例"><span class="proxy">代理</span><span class="direct">直连</span></div>
           </div>
-          <div class="chart" id="trend-chart"><canvas aria-hidden="true"></canvas><p class="chart-empty" hidden>等待第一批采样数据</p></div>
-          <details><summary>每日明细</summary><div id="trend-table"></div></details>
+          <div class="chart" id="trend-chart" tabindex="0" role="group" aria-label="每日流量图，鼠标悬停或用左右方向键查看当日明细">
+            <canvas aria-hidden="true"></canvas>
+            <p class="chart-empty" hidden>等待第一批采样数据</p>
+            <div id="trend-tooltip" class="chart-tooltip" role="status" hidden></div>
+          </div>
         </article>
         <article class="panel breakdown">
           <div class="panel-head"><div><h2>流量去向</h2><p>按代理链分类</p></div></div>
@@ -170,24 +170,6 @@
     </section>
 
     <section id="review" class="view" aria-labelledby="page-title" hidden>
-      <article class="panel analysis-panel" aria-labelledby="ai-heading">
-        <div class="panel-head">
-          <div><h2 id="ai-heading">大模型分流分析</h2><p>按所选统计周期和代理类型汇总流量。点击后向 DeepSeek 发送最多 24 个待审核域名及汇总用量。</p></div>
-          <button type="button" class="btn primary" id="run-analysis">DeepSeek 一键分析</button>
-        </div>
-        <p id="analysis-status" class="helper" role="status" hidden></p>
-        <div id="analysis-result" hidden>
-          <dl class="analysis-totals" id="analysis-totals"></dl>
-          <p id="analysis-summary" hidden></p>
-          <ul id="analysis-recommendations" class="analysis-recommendations" hidden></ul>
-          <details id="analysis-config" hidden>
-            <summary>查看 Mihomo 规则示例</summary>
-            <p class="helper">已接入 RouteSift 规则集时，可逐条带入审核。手动配置时，将验证过的规则添加到现有 rules 列表里，放在会先命中它们的规则前。</p>
-            <textarea id="analysis-rules" class="mono" rows="5" readonly aria-label="生成的 Mihomo 规则"></textarea>
-            <button type="button" class="btn secondary" id="copy-analysis-rules">复制规则示例</button>
-          </details>
-        </div>
-      </article>
       <article class="panel table-panel">
         <div class="table-controls">
           <div class="segments" role="group" aria-label="筛选规则">
@@ -251,7 +233,14 @@
 
     <section id="rules" class="view" aria-labelledby="page-title" hidden>
       <article class="panel integration">
-        <div class="panel-head"><div><h2>接入 FlClash</h2><p>当前配置启用覆写脚本后，保存规则会尝试立即同步到 FlClash。</p></div><a class="btn primary" href="/rules/flclash-override.js" download>下载覆写脚本</a></div>
+        <div class="panel-head">
+          <div><h2>接入桌面客户端</h2><p>Clash Verge Rev 可用脚本接入。使用 YAML 时，将规则集加入订阅的「扩展配置」，再将文件末尾的规则加入同一订阅的「编辑规则 → 前置」。</p></div>
+          <div class="integration-actions">
+            <a class="btn primary" href="/rules/flclash-override.js" download>下载 FlClash 脚本</a>
+            <a class="btn secondary" href="/rules/clash-verge-override.js" download>下载 Clash Verge 脚本</a>
+            <a class="btn secondary" href="/rules/clash-verge-merge.yaml" download>下载 Clash Verge YAML</a>
+          </div>
+        </div>
         <div class="provider-links">
           <a href="/rules/my-direct.yaml" target="_blank" rel="noopener">DIRECT</a>
           <a href="/rules/my-reject.yaml" target="_blank" rel="noopener">REJECT</a>

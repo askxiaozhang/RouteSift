@@ -1,4 +1,11 @@
-"use strict";
+import { api } from "./api.js";
+import { canvas } from "./charts.js";
+import { openDecision, sameTarget } from "./decisions.js";
+import { state } from "./state.js";
+import { $, $$, bytes, el, integer, kinds, percent, routes, selectedDays, table, tag, text, timezone } from "./ui.js";
+
+let reloadView;
+let updateLocation;
 
 const domainView = { result: null, point: null, plot: null, submitted: "", suggestionId: 0 };
 const domainGrains = { "5m": "5 分钟", hour: "1 小时", day: "1 天" };
@@ -56,7 +63,7 @@ function adoptDomainHash(queryString) {
 function domainLink(host, scope = "exact") {
   if (!host) return "未知目标";
   const values = state.view === "domains" && domainView.result
-    ? domainView.result : defaultDomainDates(Number($("#days").value));
+    ? domainView.result : defaultDomainDates(selectedDays());
   const link = el("a", host, "domain-link");
   link.href = domainHash({
     host, scope: host.includes(":") || /^\d+(?:\.\d+){3}$/.test(host) ? "exact" : scope,
@@ -297,11 +304,13 @@ function submitDomainForm() {
     try { input.value = new URL(input.value.trim()).hostname.replace(/^\[|\]$/g, ""); }
     catch { /* The API will validate the target. */ }
   }
-  updateViewLocation();
-  loadView();
+  updateLocation();
+  reloadView();
 }
 
-function initDomainView() {
+function initDomainView({ reload, updateLocation: syncLocation }) {
+  reloadView = reload;
+  updateLocation = syncLocation;
   adoptDomainHash("");
   $("#domain-form").addEventListener("submit", (event) => { event.preventDefault(); submitDomainForm(); });
   for (const preset of $$("[data-domain-days]")) {
@@ -348,3 +357,5 @@ function initDomainView() {
   });
   new ResizeObserver(drawDomainTimeline).observe(chart);
 }
+
+export { initDomainView, loadDomainView, domainHash, adoptDomainHash, domainLink };
